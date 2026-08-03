@@ -166,7 +166,10 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// 確保所有函式都掛在 window 上，以便 HTML onclick 調用
 (function(){
+  console.log('✅ 系統載入中...');
+
   const STORAGE_KEY = 'jig_sys_final';
   function defaultData(){
     return {
@@ -254,7 +257,8 @@
     toastTimer=setTimeout(()=>t.classList.remove('show'),2600);
   }
 
-  window.switchPage=function(page){
+  // 將所有需要在 HTML 中直接調用的函式掛到 window
+  window.switchPage = function(page){
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
     document.querySelectorAll('.sidebar nav a').forEach(a=>a.classList.remove('active'));
     document.getElementById('page-'+page).classList.add('active');
@@ -306,7 +310,7 @@
     document.getElementById('dashboardTable').innerHTML=html;
   }
 
-  window.quickUpdate=function(oid){
+  window.quickUpdate = function(oid){
     const o=appData.orders.find(x=>x.id===oid);if(!o)return;
     const add=Math.floor(Math.random()*12)+5;
     o.progress=Math.min(100,o.progress+add);
@@ -337,7 +341,7 @@
     document.getElementById('supplierTable').innerHTML=html;
   }
 
-  window.openSupplierForm=function(editId){
+  window.openSupplierForm = function(editId){
     const s=editId?appData.suppliers.find(x=>x.id===editId):null;
     document.getElementById('modalBox').innerHTML=`
       <div class="modal-hdr"><h3>${s?'✏️編輯供應商':'＋新增供應商'}</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
@@ -362,7 +366,7 @@
     document.getElementById('modalOverlay').classList.add('on');
   };
 
-  window.saveSupplier=function(e,editId){
+  window.saveSupplier = function(e,editId){
     e.preventDefault();
     const data={
       id:document.getElementById('supId').value.trim(),
@@ -387,8 +391,8 @@
     saveData();closeModal();renderSuppliers();
   };
 
-  window.editSupplier=function(id){openSupplierForm(id);};
-  window.deleteSupplier=function(id){
+  window.editSupplier = function(id){openSupplierForm(id);};
+  window.deleteSupplier = function(id){
     if(!confirm('確定刪除？'))return;
     appData.suppliers=appData.suppliers.filter(s=>s.id!==id);
     saveData();renderSuppliers();toast('已刪除','success');
@@ -416,7 +420,7 @@
     document.getElementById('orderTable').innerHTML=html;
   }
 
-  window.openOrderForm=function(editId){
+  window.openOrderForm = function(editId){
     const o=editId?appData.orders.find(x=>x.id===editId):null;
     const milestones=o?JSON.stringify(o.milestones):JSON.stringify([
       {name:'圖紙確認',plannedDate:'',actualDate:'',status:'pending',note:''},
@@ -483,11 +487,11 @@
         <button type="button" class="btn btn-xs btn-danger" onclick="delMs(${i})">✕</button>
       </div>`).join('');
   }
-  window.updateMs=function(i,f,v){if(window._msData[i])window._msData[i][f]=v;};
-  window.addMs=function(){window._msData.push({name:'',plannedDate:'',actualDate:'',status:'pending',note:''});renderMsRows();};
-  window.delMs=function(i){window._msData.splice(i,1);renderMsRows();};
+  window.updateMs = function(i,f,v){if(window._msData[i])window._msData[i][f]=v;};
+  window.addMs = function(){window._msData.push({name:'',plannedDate:'',actualDate:'',status:'pending',note:''});renderMsRows();};
+  window.delMs = function(i){window._msData.splice(i,1);renderMsRows();};
 
-  window.saveOrder=function(e,editId){
+  window.saveOrder = function(e,editId){
     e.preventDefault();
     const progress=parseInt(document.getElementById('ordProgress').value)||0;
     const data={
@@ -516,14 +520,15 @@
     saveData();closeModal();renderOrders();renderDashboard();
   };
 
-  window.editOrder=function(id){openOrderForm(id);};
-  window.deleteOrder=function(id){
+  window.editOrder = function(id){openOrderForm(id);};
+  window.deleteOrder = function(id){
     if(!confirm('確定刪除訂單？'))return;
     appData.orders=appData.orders.filter(o=>o.id!==id);
     saveData();renderOrders();renderDashboard();toast('已刪除','success');
   };
 
-  window.openOrderDetail=function(oid){
+  // 關鍵：將 openOrderDetail 暴露到全局
+  window.openOrderDetail = function(oid){
     const o=appData.orders.find(x=>x.id===oid);if(!o)return;
     const msHtml=(o.milestones||[]).map(m=>{
       const dot=m.status==='completed'?'var(--success)':m.status==='in-progress'?'var(--warning)':'#cbd5e1';
@@ -570,20 +575,20 @@
     document.getElementById('abnormalTable').innerHTML=html;
   }
 
-  window.closeModal=function(){
+  window.closeModal = function(){
     document.getElementById('modalOverlay').classList.remove('on');
     document.getElementById('modalBox').innerHTML='';
   };
   document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
 
-  window.exportData=function(){
+  window.exportData = function(){
     const blob=new Blob([JSON.stringify(appData,null,2)],{type:'application/json'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);
     a.download=`治具備份_${new Date().toISOString().slice(0,10)}.json`;a.click();
     toast('📥已匯出','success');
   };
-  window.importData=function(e){
+  window.importData = function(e){
     const file=e.target.files[0];if(!file)return;
     const reader=new FileReader();
     reader.onload=ev=>{
@@ -597,7 +602,7 @@
     reader.readAsText(file);
     e.target.value='';
   };
-  window.resetAll=function(){
+  window.resetAll = function(){
     if(!confirm('重置為預設資料？所有變更將遺失。'))return;
     localStorage.removeItem(STORAGE_KEY);
     appData=defaultData();saveData();
@@ -610,6 +615,8 @@
   renderSuppliers();
   renderOrders();
   renderAbnormal();
+
+  console.log('✅ 系統已完全載入，所有功能已就緒');
 })();
 </script>
 </body>
