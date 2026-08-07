@@ -416,11 +416,9 @@ const PAGE_SIZE=10,BACKUP_KEY="jigV3LastBackup";
 function save(){try{DATA_REF.set(data,{merge:false}).then(()=>toast(t("cloudSaved"),"ok")).catch(e=>toast(t("saveFail")+e.message,"err"))}catch(e){toast(t("saveFail")+e.message,"err")}}
 function loadData(){return null}
 function listenData(){if(fbListener)fbListener();fbListener=DATA_REF.onSnapshot(snap=>{
-  fbReady=true;
-  if(!snap.exists){data={suppliers:[],orders:[]};renderAll();return}
+  if(!snap.exists){if(!fbHasData){data={suppliers:[],orders:[]};renderAll()}return}
   const d=snap.data();if(d&&d.suppliers&&d.orders){data=d;fbHasData=true;renderAll()}
-  hideLoading()
-},err=>{console.error("Firestore error:",err);toast("雲端同步錯誤","err");fbReady=true;hideLoading()})}
+},err=>{console.error("Firestore error:",err);toast("雲端同步錯誤","err")})
 function hideLoading(){const ov=document.getElementById("loadingOverlay");if(ov)ov.classList.add("hidden");fbSynced=true}
 function updateConnStatus(online){const el=document.getElementById("connIndicator");if(!el)return;el.style.display="";if(online){el.className="conn-indicator online";el.textContent="● "+t("connOnline")}else{el.className="conn-indicator offline";el.textContent="● "+t("connOffline")}}
 db.collection("system").doc("ping").onSnapshot(()=>updateConnStatus(true),()=>updateConnStatus(false));
@@ -1077,15 +1075,14 @@ function toggleNeedHelp(id){
 
 /* ==================== 初始化 ==================== */
 function init(){
-  showLoading();
   listenData();
   notif=loadNotif();resolved=loadResolved();
   populateFilters();
   applyTheme();
   applyLang();
-  setTimeout(()=>{if(!fbHasData){data={suppliers:TNES.suppliers.map(s=>Object.assign({},s)),orders:TNES.orders.map(o=>Object.assign({},o,{milestones:(o.milestones||[]).map(m=>Object.assign({},m))}))};save();saveAudit("自動載入 TNES 案例","供應商 "+data.suppliers.length+" / 訂單 "+data.orders.length);renderAll();hideLoading()}},8000)
+  renderAll();
+  setTimeout(()=>{if(!fbHasData){data={suppliers:TNES.suppliers.map(s=>Object.assign({},s)),orders:TNES.orders.map(o=>Object.assign({},o,{milestones:(o.milestones||[]).map(m=>Object.assign({},m))}))};save();saveAudit("自動載入 TNES 案例","供應商 "+data.suppliers.length+" / 訂單 "+data.orders.length)}},8000)
 }
-function showLoading(){const ov=document.getElementById("loadingOverlay");if(ov)ov.classList.remove("hidden")}
 init();
 </script>
 </body>
