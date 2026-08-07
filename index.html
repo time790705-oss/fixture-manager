@@ -418,7 +418,7 @@ function loadData(){return null}
 function listenData(){if(fbListener)fbListener();fbListener=DATA_REF.onSnapshot(snap=>{
   if(!snap.exists){if(!fbHasData){data={suppliers:[],orders:[]};renderAll()}return}
   const d=snap.data();if(d&&d.suppliers&&d.orders){data=d;fbHasData=true;renderAll()}
-},err=>{console.error("Firestore error:",err);toast("雲端同步錯誤","err")})
+},err=>{console.error("Firestore error:",err);toast("雲端同步錯誤","err")})}
 function hideLoading(){const ov=document.getElementById("loadingOverlay");if(ov)ov.classList.add("hidden");fbSynced=true}
 function updateConnStatus(online){const el=document.getElementById("connIndicator");if(!el)return;el.style.display="";if(online){el.className="conn-indicator online";el.textContent="● "+t("connOnline")}else{el.className="conn-indicator offline";el.textContent="● "+t("connOffline")}}
 db.collection("system").doc("ping").onSnapshot(()=>updateConnStatus(true),()=>updateConnStatus(false));
