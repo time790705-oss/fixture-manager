@@ -421,8 +421,9 @@ function listenData(){if(fbListener)fbListener();fbListener=DATA_REF.onSnapshot(
   hideLoading()
 },err=>{console.error("Firestore error:",err);toast("雲端同步錯誤","err");hideLoading()})}
 function hideLoading(){const ov=document.getElementById("loadingOverlay");if(ov&&!fbSynced){ov.classList.add("hidden");fbSynced=true}}
-function updateConnStatus(online){const el=document.getElementById("connIndicator");if(!el)return;if(online){el.className="conn-indicator online";el.textContent="● "+t("connOnline")}else{el.className="conn-indicator offline";el.textContent="● "+t("connOffline")}}
+function updateConnStatus(online){const el=document.getElementById("connIndicator");if(!el)return;el.style.display="";if(online){el.className="conn-indicator online";el.textContent="● "+t("connOnline")}else{el.className="conn-indicator offline";el.textContent="● "+t("connOffline")}}
 db.collection("system").doc("ping").onSnapshot(()=>updateConnStatus(true),()=>updateConnStatus(false));
+setTimeout(()=>updateConnStatus(true),1000);
 function saveAudit(a,d){let arr=[];try{arr=JSON.parse(localStorage.getItem(AUDIT_KEY)||"[]")}catch(e){}arr.unshift({t:new Date().toISOString(),a,d});try{localStorage.setItem(AUDIT_KEY,JSON.stringify(arr.slice(0,500)))}catch(e){}}
 function loadNotif(){try{return JSON.parse(localStorage.getItem(NOTIF_KEY)||"{}")}catch(e){}return{}}
 function saveNotif(){try{localStorage.setItem(NOTIF_KEY,JSON.stringify(notif))}catch(e){}}
