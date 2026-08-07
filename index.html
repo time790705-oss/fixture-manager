@@ -347,7 +347,7 @@ firebase.initializeApp(firebaseConfig);
 try{firebase.firestore().enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
 const db=firebase.firestore();
 const DATA_REF=db.collection("system").doc("appData");
-let fbListener=null,fbSynced=false;
+let fbListener=null,fbSynced=false,fbReady=false,fbHasData=false;
 /* ==================== 多語系 i18n ==================== */
 const I18N={
 zh:{loginTitle:"🔧 治具進度管理系統",loginSub:"V4 專業版 — 供應商治具進度追蹤",tabAdmin:"🔑 管理員",tabSupplier:"🏭 供應商",password:"密碼",pwdPh:"輸入任意密碼登入",login:"登入",logout:"↩️ 登出",brand:"🔧 治具進度管理",admin:"管理員",supplier:"供應商",
@@ -416,10 +416,11 @@ const PAGE_SIZE=10,BACKUP_KEY="jigV3LastBackup";
 function save(){try{DATA_REF.set(data,{merge:false}).then(()=>toast(t("cloudSaved"),"ok")).catch(e=>toast(t("saveFail")+e.message,"err"))}catch(e){toast(t("saveFail")+e.message,"err")}}
 function loadData(){return null}
 function listenData(){if(fbListener)fbListener();fbListener=DATA_REF.onSnapshot(snap=>{
-  if(!snap.exists){data={suppliers:[],orders:[]};renderAll();hideLoading();return}
-  const d=snap.data();if(d&&d.suppliers&&d.orders){data=d;renderAll()}
+  fbReady=true;
+  if(!snap.exists){data={suppliers:[],orders:[]};renderAll();return}
+  const d=snap.data();if(d&&d.suppliers&&d.orders){data=d;fbHasData=true;renderAll()}
   hideLoading()
-},err=>{console.error("Firestore error:",err);toast("雲端同步錯誤","err");hideLoading()})}
+},err=>{console.error("Firestore error:",err);toast("雲端同步錯誤","err");fbReady=true;hideLoading()})}
 function hideLoading(){const ov=document.getElementById("loadingOverlay");if(ov)ov.classList.add("hidden");fbSynced=true}
 function updateConnStatus(online){const el=document.getElementById("connIndicator");if(!el)return;el.style.display="";if(online){el.className="conn-indicator online";el.textContent="● "+t("connOnline")}else{el.className="conn-indicator offline";el.textContent="● "+t("connOffline")}}
 db.collection("system").doc("ping").onSnapshot(()=>updateConnStatus(true),()=>updateConnStatus(false));
@@ -1082,7 +1083,7 @@ function init(){
   populateFilters();
   applyTheme();
   applyLang();
-  setTimeout(()=>{if(!fbSynced){data={suppliers:TNES.suppliers.map(s=>Object.assign({},s)),orders:TNES.orders.map(o=>Object.assign({},o,{milestones:(o.milestones||[]).map(m=>Object.assign({},m))}))};save();saveAudit("自動載入 TNES 案例","供應商 "+data.suppliers.length+" / 訂單 "+data.orders.length);renderAll();hideLoading()}},8000)
+  setTimeout(()=>{if(!fbHasData){data={suppliers:TNES.suppliers.map(s=>Object.assign({},s)),orders:TNES.orders.map(o=>Object.assign({},o,{milestones:(o.milestones||[]).map(m=>Object.assign({},m))}))};save();saveAudit("自動載入 TNES 案例","供應商 "+data.suppliers.length+" / 訂單 "+data.orders.length);renderAll();hideLoading()}},8000)
 }
 function showLoading(){const ov=document.getElementById("loadingOverlay");if(ov)ov.classList.remove("hidden")}
 init();
