@@ -167,6 +167,36 @@ html.dark .role-tabs button.active{background:#1a2c50}
 html.dark .badge.gray{background:#27365a;color:#cbd5e1}
 html.dark #reportText{background:#101a30;border-color:#33436b;color:var(--text)}
 html.dark #loginMsg,html.dark .empty{color:var(--muted)}
+/* Calendar */
+.cal-nav{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.cal-nav .cal-title{font-size:18px;font-weight:700;min-width:160px;text-align:center}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.cal-head{background:#f8fafc;padding:8px;text-align:center;font-size:12px;font-weight:600;color:#475569;border-bottom:1px solid var(--line)}
+html.dark .cal-head{background:#101a30;color:#93a5c4}
+.cal-cell{min-height:90px;padding:4px 6px;border:1px solid #f1f5f9;font-size:11px;position:relative;vertical-align:top}
+html.dark .cal-cell{border-color:var(--line)}
+.cal-cell.other{background:#fafbfc;opacity:.5}
+html.dark .cal-cell.other{background:#0d1628}
+.cal-cell.today{background:#eff6ff;outline:2px solid var(--blue);outline-offset:-2px}
+html.dark .cal-cell.today{background:#1a2c50}
+.cal-cell .cal-day{font-weight:700;font-size:12px;margin-bottom:2px;color:var(--muted)}
+.cal-cell.today .cal-day{color:var(--blue)}
+.cal-event{display:block;padding:2px 4px;border-radius:3px;font-size:10px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;color:#fff}
+.cal-event.done{background:var(--green)}.cal-event.overdue{background:var(--red)}.cal-event.active{background:var(--blue)}.cal-event.pending{background:#60a5fa}.cal-event.due{background:var(--amber)}
+.cal-event:hover{opacity:.8}
+.cal-legend{display:flex;gap:14px;margin-top:10px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+.cal-legend span{display:inline-flex;align-items:center;gap:4px}
+.cal-legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+/* Sub-steps */
+.ms-sub-toggle{cursor:pointer;font-size:11px;color:var(--blue);margin-left:4px;user-select:none}
+.ms-sub-wrap{margin:0 0 6px 20px;padding:6px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:12px}
+html.dark .ms-sub-wrap{background:#101a30;border-color:#33436b}
+.ms-sub-row{display:flex;gap:4px;align-items:center;margin-bottom:3px}
+.ms-sub-row input{padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:11px}
+.ms-sub-row .sub-name{flex:2}
+.ms-sub-row .sub-date{flex:1.2;font-size:11px}
+.ms-sub-row .sub-status{flex:1;font-size:11px}
+.ms-sub-add{font-size:11px;color:var(--blue);cursor:pointer;margin-top:2px}
 </style>
 </head>
 <body>
@@ -207,6 +237,7 @@ html.dark #loginMsg,html.dark .empty{color:var(--muted)}
 <div class="nav-title" data-i18n="navTools">分析工具</div>
 <button data-page="search" onclick="go('search')" data-i18n="navSearch">🔍 進階搜尋</button>
 <button data-page="gantt" onclick="go('gantt')">📅 Timeline</button>
+<button data-page="calendar" onclick="go('calendar')">🗓️ 行事曆</button>
 <button data-page="performance" onclick="go('performance')" data-i18n="navPerf">📈 績效分析</button>
 <button data-page="notifications" onclick="go('notifications')" data-i18n="navNotif">🔔 通知中心</button>
 <div class="nav-sep"></div>
@@ -258,6 +289,7 @@ html.dark #loginMsg,html.dark .empty{color:var(--muted)}
 <section id="page-mycompany" class="page"><div class="card"><h3 data-i18n="navMyCompany">🏢 我的公司</h3><div id="myCompanyView"></div></div></section>
 <section id="page-search" class="page"><div class="card"><h3 data-i18n="navSearchH">🔍 進階搜尋</h3><div class="toolbar"><input type="search" id="globalSearch" data-i18n-ph="globalPh" placeholder="輸入關鍵字..." oninput="renderSearch()"></div><div id="searchResults"></div></div></section>
 <section id="page-gantt" class="page"><div class="card"><h3>📅 Timeline / Gantt</h3><div id="ganttView"></div></div></section>
+<section id="page-calendar" class="page"><div class="card"><h3>🗓️ 行事曆</h3><div id="calNav" class="cal-nav"></div><div id="calView"></div><div id="calLegend" class="cal-legend"></div></div></section>
 <section id="page-performance" class="page"><div class="card"><h3 data-i18n="perfH">📈 供應商績效分析</h3><div id="perfView"></div></div></section>
 <section id="page-notifications" class="page"><div class="card"><h3 data-i18n="notifH">🔔 通知中心</h3><div id="notifView"></div></div></section>
 <section id="page-audit" class="page"><div class="card"><h3>🧾 Audit Log</h3><div id="auditView"></div></div></section>
@@ -314,7 +346,7 @@ storageUse:"LocalStorage：{k} KB / 5 MB ({p}%)",lastBk:"上次備份：{t}",noB
 weeklyTitle:"週報",copied:"週報已複製",reportTitle:"【治具進度週報】",wrDone:"✅ 本週完成",wrOverdue:"🔴 逾期項目",wrDue:"⏰ 7天內到期",wrActive:"🔵 進行中訂單",none:"無",
 importMode:"選擇匯入模式：\n\n確定 = 覆蓋（取代全部現有資料）\n取消 = 合併（相同編號更新、其餘保留）",importOk:"匯入成功：供應商 {s} 筆 / 訂單 {o} 筆",importModeJson:"選擇還原模式：\n\n確定 = 覆蓋（取代全部現有資料）\n取消 = 合併（相同編號更新、其餘保留）",
 backupToast:"距離上次備份已超過 7 天，建議執行 💾 JSON 備份",validOk:"資料驗證通過",validErr:"發現 {n} 項問題",syncDone:"同步完成",confirmClear:"清除所有資料？此操作不可復原。",confirmSeed:"已有資料，仍要加入？",confirmTnes:"載入 TNES 真實案例資料？（15 家供應商 / 8 筆訂單）\n現有資料將以相同編號更新。",
-chaseSubject:"[催交] {id} 逾期提醒",chaseHi:"您好：",chaseBody:"以下訂單里程碑已逾期，敬請回覆最新交期：",chaseEnd:"謝謝合作",totalRows:"共 {n} 筆",pagerPrev:"‹ 上一頁",pagerNext:"下一頁 ›",resolvedBtn:"已處理",thOverDays:"逾期天數",supCode:"供應商代碼",supCodePh:"請輸入您的供應商代碼",codeNotFound:"供應商代碼不存在，請與管理者確認",supDisabled:"該供應商已停用，請聯繫管理者",pwdWrong:"密碼錯誤",dupCode:"供應商代碼重複，請使用其他代碼",fLoginCode:"供應商代碼（登入帳號）",fLoginPwd:"登入密碼",thCode:"代碼",supPwdHint:"忘記代碼或密碼請聯繫管理者",msTodo:"未開始",msDoing:"進行中",msHold:"暫停",msDoneC:"已完成",thMsStatus:"狀態",thLatest:"最新里程碑",msNotes:"備註",msNotesPh:"填寫狀況或異常說明...",navMyCompany:"🏢 我的公司",mcId:"供應商編號",mcName:"公司名稱",mcContact:"聯絡人",mcPhone:"電話",mcEmail:"Email",mcCategory:"類別",mcStatus:"狀態",mcCode:"登入代碼",mcOrders:"訂單總數",mcActive:"進行中",mcDone:"已完成",mcOverdue:"逾期",batchTitle:"批次更新進度",batchHint:"勾選要更新的訂單，統一填實際日期與狀態",batchSelectAll:"全選",batchMs:"里程碑",batchDate:"實際日期",batchStatus:"狀態",batchApply:"套用",batchDone:"已更新 {n} 筆訂單",needHelp:"🆘 需要協助",helpActive:"已標記需要協助",helpClear:"取消協助",helpNotify:"已通知管理者",valActualBeforePlan:"實際日期早於預定日期（提前完成）",valActualBeforeOrder:"實際日期早於訂單建立日期",valPlanBeforeOrder:"里程碑預定日期早於訂單建立日期",valOrderDoneMsNotDone:"訂單標記完成但有 {n} 個里程碑未完成，確定繼續？",valDupOrderId:"訂單編號已存在，將覆蓋原有資料，確定繼續？",valStatusDoneNoDate:"里程碑狀態為已完成但無實際日期",valProgressMismatch:"手動進度 ({a}%) 與里程碑計算 ({b}%) 不一致",progAuto:"（自動計算）",progManual:"（手動覆寫）",warnLowProg:"⚠️ 交期 {d} 天內，進度僅 {p}%",warnTrend:"📉 連續 {n} 筆延遲",warnBurst:"🔥 短期 {n} 筆逾期",thTrend:"趨勢",msDelayed:"延遲 {d} 天",msEarly:"提前 {d} 天",msOverDue:"超出交期 {d} 天",msBeyondDue:"以下里程碑的預定日期超出最終交期：\n{list}\n\n確定＝仍要儲存，取消＝回去修改",validDueErr:" 里程碑 預定日期超出最終交期",beyondDueTag:"⚠️ 超出最終交期",beyondDueTip:"此里程碑預定日期超出訂單最終交期"},
+chaseSubject:"[催交] {id} 逾期提醒",chaseHi:"您好：",chaseBody:"以下訂單里程碑已逾期，敬請回覆最新交期：",chaseEnd:"謝謝合作",totalRows:"共 {n} 筆",pagerPrev:"‹ 上一頁",pagerNext:"下一頁 ›",resolvedBtn:"已處理",thOverDays:"逾期天數",supCode:"供應商代碼",supCodePh:"請輸入您的供應商代碼",codeNotFound:"供應商代碼不存在，請與管理者確認",supDisabled:"該供應商已停用，請聯繫管理者",pwdWrong:"密碼錯誤",dupCode:"供應商代碼重複，請使用其他代碼",fLoginCode:"供應商代碼（登入帳號）",fLoginPwd:"登入密碼",thCode:"代碼",supPwdHint:"忘記代碼或密碼請聯繫管理者",msTodo:"未開始",msDoing:"進行中",msHold:"暫停",msDoneC:"已完成",thMsStatus:"狀態",thLatest:"最新里程碑",msNotes:"備註",msNotesPh:"填寫狀況或異常說明...",navMyCompany:"🏢 我的公司",mcId:"供應商編號",mcName:"公司名稱",mcContact:"聯絡人",mcPhone:"電話",mcEmail:"Email",mcCategory:"類別",mcStatus:"狀態",mcCode:"登入代碼",mcOrders:"訂單總數",mcActive:"進行中",mcDone:"已完成",mcOverdue:"逾期",batchTitle:"批次更新進度",batchHint:"勾選要更新的訂單，統一填實際日期與狀態",batchSelectAll:"全選",batchMs:"里程碑",batchDate:"實際日期",batchStatus:"狀態",batchApply:"套用",batchDone:"已更新 {n} 筆訂單",needHelp:"🆘 需要協助",helpActive:"已標記需要協助",helpClear:"取消協助",helpNotify:"已通知管理者",valActualBeforePlan:"實際日期早於預定日期（提前完成）",valActualBeforeOrder:"實際日期早於訂單建立日期",valPlanBeforeOrder:"里程碑預定日期早於訂單建立日期",valOrderDoneMsNotDone:"訂單標記完成但有 {n} 個里程碑未完成，確定繼續？",valDupOrderId:"訂單編號已存在，將覆蓋原有資料，確定繼續？",valStatusDoneNoDate:"里程碑狀態為已完成但無實際日期",valProgressMismatch:"手動進度 ({a}%) 與里程碑計算 ({b}%) 不一致",progAuto:"（自動計算）",progManual:"（手動覆寫）",warnLowProg:"⚠️ 交期 {d} 天內，進度僅 {p}%",warnTrend:"📉 連續 {n} 筆延遲",warnBurst:"🔥 短期 {n} 筆逾期",thTrend:"趨勢",msDelayed:"延遲 {d} 天",msEarly:"提前 {d} 天",msOverDue:"超出交期 {d} 天",msBeyondDue:"以下里程碑的預定日期超出最終交期：\n{list}\n\n確定＝仍要儲存，取消＝回去修改",validDueErr:" 里程碑 預定日期超出最終交期",beyondDueTag:"⚠️ 超出最終交期",beyondDueTip:"此里程碑預定日期超出訂單最終交期",navCalendar:"🗓️ 行事曆",titleCalendar:"行事曆",calToday:"今天",calMonth:"月",calWeek:"週",calDays:"日一二三四五六",calNoEvent:"無交期事項",calDue:"交期",calDone:"已完成",calOverdue:"逾期",calActive:"進行中",calPending:"待開始",calClickTip:"點擊事件查看訂單",subToggle:"子步驟",subAdd:"＋ 子步驟",subNamePh:"子步驟名稱",subEmpty:"無子步驟"},
 en:{loginTitle:"🔧 Fixture Progress Management",loginSub:"V4 Pro — Supplier Fixture Tracking",tabAdmin:"🔑 Admin",tabSupplier:"🏭 Supplier",password:"Password",pwdPh:"Enter any password to sign in",login:"Sign In",logout:"↩️ Logout",brand:"🔧 Fixture Progress",admin:"Admin",supplier:"Supplier",
 navDashboard:"📊 Dashboard",navSuppliers:"🏭 Suppliers",navOrders:"📋 Orders",navAlerts:"⚠️ Alerts",navTools:"Analysis",navSearch:"🔍 Search",navPerf:"📈 Performance",navNotif:"🔔 Notifications",navSystem:"System",navSettings:"⚙️ Settings",navAlertsH:"⚠️ Alert Tracking",navSearchH:"🔍 Advanced Search",perfH:"📈 Supplier Performance",notifH:"🔔 Notification Center",settingsH:"⚙️ System Settings",titleDashboard:"Dashboard",titleGantt:"Timeline / Gantt",titleAudit:"Audit Log",
 dashOrders:"📋 Active Orders",dashDue:"📅 Upcoming Due",dashAlerts:"⚠️ Overdue Alerts",import:"📥 Import",weekly:"📋 Weekly",cancel:"Cancel",save:"Save",add:"＋ Add",copy:"Copy",searchSupPh:"Search suppliers...",searchOrdPh:"Search orders...",globalPh:"Enter keyword...",allStatus:"All Statuses",allSuppliers:"All Suppliers",
@@ -332,7 +364,7 @@ storageUse:"LocalStorage: {k} KB / 5 MB ({p}%)",lastBk:"Last backup: {t}",noBk:"
 weeklyTitle:"Weekly Report",copied:"Report copied",reportTitle:"[Fixture Progress Weekly Report]",wrDone:"✅ Completed This Week",wrOverdue:"🔴 Overdue Items",wrDue:"⏰ Due Within 7 Days",wrActive:"🔵 Active Orders",none:"None",
 importMode:"Choose import mode:\n\nOK = Overwrite (replace all data)\nCancel = Merge (update matching IDs, keep others)",importOk:"Imported: {s} suppliers / {o} orders",importModeJson:"Choose restore mode:\n\nOK = Overwrite (replace all data)\nCancel = Merge (update matching IDs, keep others)",
 backupToast:"No backup for over 7 days. Please run 💾 JSON backup.",validOk:"Data validation passed",validErr:"{n} issues found",syncDone:"Sync complete",confirmClear:"Clear all data? This cannot be undone.",confirmSeed:"Data exists. Add demo anyway?",confirmTnes:"Load TNES demo data? (15 suppliers / 8 orders)\nExisting records with same IDs will be updated.",
-chaseSubject:"[Chase] {id} overdue reminder",chaseHi:"Hi,",chaseBody:"The following milestones are overdue. Please reply with the latest schedule:",chaseEnd:"Thank you.",totalRows:"{n} rows",pagerPrev:"‹ Prev",pagerNext:"Next ›",resolvedBtn:"Resolved",thOverDays:"Days Overdue",supCode:"Supplier Code",supCodePh:"Enter your supplier code",codeNotFound:"Supplier code not found. Please contact your admin",supDisabled:"This supplier is disabled. Please contact your admin",pwdWrong:"Wrong password",dupCode:"Supplier code already exists",fLoginCode:"Supplier Code (Login ID)",fLoginPwd:"Login Password",thCode:"Code",supPwdHint:"Forgot your code or password? Contact your admin",msTodo:"Not Started",msDoing:"In Progress",msHold:"On Hold",msDoneC:"Completed",thMsStatus:"Status",thLatest:"Current Stage",msNotes:"Notes",msNotesPh:"Status or issue description...",navMyCompany:"🏢 My Company",mcId:"Supplier ID",mcName:"Company Name",mcContact:"Contact",mcPhone:"Phone",mcEmail:"Email",mcCategory:"Category",mcStatus:"Status",mcCode:"Login Code",mcOrders:"Total Orders",mcActive:"Active",mcDone:"Done",mcOverdue:"Overdue",batchTitle:"Batch Update Progress",batchHint:"Select orders to update with unified actual dates and status",batchSelectAll:"Select All",batchMs:"Milestone",batchDate:"Actual Date",batchStatus:"Status",batchApply:"Apply",batchDone:"{n} orders updated",needHelp:"🆘 Need Help",helpActive:"Help requested",helpClear:"Cancel Help",helpNotify:"Admin notified",valActualBeforePlan:"Actual date is before planned date (early completion)",valActualBeforeOrder:"Actual date is before order creation date",valPlanBeforeOrder:"Milestone planned date is before order creation date",valOrderDoneMsNotDone:"Order marked done but {n} milestones incomplete. Continue?",valDupOrderId:"Order ID already exists. It will be overwritten. Continue?",valStatusDoneNoDate:"Milestone status is completed but no actual date",valProgressMismatch:"Manual progress ({a}%) differs from milestone calculation ({b}%)",progAuto:"(auto)",progManual:"(manual override)",warnLowProg:"⚠️ Due in {d} days, progress only {p}%",warnTrend:"📉 {n} consecutive delays",warnBurst:"🔥 {n} overdue in short period",thTrend:"Trend",msDelayed:"Delayed {d} days",msEarly:"Early {d} days",msOverDue:"Beyond due date {d} days",msBeyondDue:"The following milestones are planned beyond the final due date:\n{list}\n\nOK = Save anyway, Cancel = Go back",validDueErr:" milestone planned beyond final due date",beyondDueTag:"⚠️ Beyond Final Due",beyondDueTip:"This milestone is planned beyond the order's final due date"}
+chaseSubject:"[Chase] {id} overdue reminder",chaseHi:"Hi,",chaseBody:"The following milestones are overdue. Please reply with the latest schedule:",chaseEnd:"Thank you.",totalRows:"{n} rows",pagerPrev:"‹ Prev",pagerNext:"Next ›",resolvedBtn:"Resolved",thOverDays:"Days Overdue",supCode:"Supplier Code",supCodePh:"Enter your supplier code",codeNotFound:"Supplier code not found. Please contact your admin",supDisabled:"This supplier is disabled. Please contact your admin",pwdWrong:"Wrong password",dupCode:"Supplier code already exists",fLoginCode:"Supplier Code (Login ID)",fLoginPwd:"Login Password",thCode:"Code",supPwdHint:"Forgot your code or password? Contact your admin",msTodo:"Not Started",msDoing:"In Progress",msHold:"On Hold",msDoneC:"Completed",thMsStatus:"Status",thLatest:"Current Stage",msNotes:"Notes",msNotesPh:"Status or issue description...",navMyCompany:"🏢 My Company",mcId:"Supplier ID",mcName:"Company Name",mcContact:"Contact",mcPhone:"Phone",mcEmail:"Email",mcCategory:"Category",mcStatus:"Status",mcCode:"Login Code",mcOrders:"Total Orders",mcActive:"Active",mcDone:"Done",mcOverdue:"Overdue",batchTitle:"Batch Update Progress",batchHint:"Select orders to update with unified actual dates and status",batchSelectAll:"Select All",batchMs:"Milestone",batchDate:"Actual Date",batchStatus:"Status",batchApply:"Apply",batchDone:"{n} orders updated",needHelp:"🆘 Need Help",helpActive:"Help requested",helpClear:"Cancel Help",helpNotify:"Admin notified",valActualBeforePlan:"Actual date is before planned date (early completion)",valActualBeforeOrder:"Actual date is before order creation date",valPlanBeforeOrder:"Milestone planned date is before order creation date",valOrderDoneMsNotDone:"Order marked done but {n} milestones incomplete. Continue?",valDupOrderId:"Order ID already exists. It will be overwritten. Continue?",valStatusDoneNoDate:"Milestone status is completed but no actual date",valProgressMismatch:"Manual progress ({a}%) differs from milestone calculation ({b}%)",progAuto:"(auto)",progManual:"(manual override)",warnLowProg:"⚠️ Due in {d} days, progress only {p}%",warnTrend:"📉 {n} consecutive delays",warnBurst:"🔥 {n} overdue in short period",thTrend:"Trend",msDelayed:"Delayed {d} days",msEarly:"Early {d} days",msOverDue:"Beyond due date {d} days",msBeyondDue:"The following milestones are planned beyond the final due date:\n{list}\n\nOK = Save anyway, Cancel = Go back",validDueErr:" milestone planned beyond final due date",beyondDueTag:"⚠️ Beyond Final Due",beyondDueTip:"This milestone is planned beyond the order's final due date",navCalendar:"🗓️ Calendar",titleCalendar:"Calendar",calToday:"Today",calMonth:"Month",calWeek:"Week",calDays:"SunMonTueWedThuFriSat",calNoEvent:"No events",calDue:"Due",calDone:"Done",calOverdue:"Overdue",calActive:"Active",calPending:"Pending",calClickTip:"Click event to view order",subToggle:"Sub-steps",subAdd:"＋ Sub-step",subNamePh:"Sub-step name",subEmpty:"No sub-steps"}
 };
 let lang=localStorage.getItem("jigV3Lang")||"zh";
 function t(k){return (I18N[lang]&&I18N[lang][k])||I18N.zh[k]||k}
@@ -435,7 +467,7 @@ function go(p){
   document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
   const el=document.getElementById("page-"+p);if(el)el.classList.add("active");
   document.querySelectorAll(".nav button[data-page]").forEach(x=>x.classList.toggle("active",x.dataset.page===p));
-  const titles={dashboard:t("titleDashboard"),suppliers:t("navSuppliers"),mycompany:t("navMyCompany"),orders:t("navOrders"),alerts:t("navAlertsH"),search:t("navSearchH"),gantt:t("titleGantt"),performance:t("perfH"),notifications:t("notifH"),audit:t("titleAudit"),sync:t("settingsH")};
+  const titles={dashboard:t("titleDashboard"),suppliers:t("navSuppliers"),mycompany:t("navMyCompany"),orders:t("navOrders"),alerts:t("navAlertsH"),search:t("navSearchH"),gantt:t("titleGantt"),calendar:t("titleCalendar"),performance:t("perfH"),notifications:t("notifH"),audit:t("titleAudit"),sync:t("settingsH")};
   document.getElementById("pageTitle").textContent=titles[p]||t("titleDashboard");
   renderAll();
 }
@@ -443,7 +475,7 @@ function go(p){
 /* ==================== 渲染 ==================== */
 function renderAll(){
   renderDashboard();renderSuppliers();renderOrders();renderAlerts();
-  renderSearch();renderGantt();renderPerf();renderNotif();renderAudit();renderStorage();renderMyCompany();
+  renderSearch();renderGantt();renderCalendar();renderPerf();renderNotif();renderAudit();renderStorage();renderMyCompany();
 }
 function kpiJump(filter){go("orders");document.getElementById("orderSearch").value="";if(filter==="due"){document.getElementById("orderFilter").value="";specialFilter="due"}else{specialFilter=null;document.getElementById("orderFilter").value=filter}orderPage=1;renderOrders()}
 let specialFilter=null;
@@ -602,6 +634,52 @@ function renderGantt(){
   html+='</div><div class="gantt-legend"><span><i style="background:var(--green)"></i>'+t("gDone")+'</span><span><i style="background:#60a5fa"></i>'+t("msDoing")+'</span><span><i style="background:var(--blue)"></i>'+t("gPending")+'</span><span><i style="background:#94a3b8"></i>'+t("msHold")+'</span><span><i style="background:var(--red)"></i>'+t("gOverdue")+'</span><span><i style="background:#f59e0b"></i>'+t("gToday")+'</span></div>';
   document.getElementById("ganttView").innerHTML=html;
 }
+/* ==================== 行事曆 ==================== */
+let calYear=0,calMonth=0;
+function renderCalendar(){
+  const now=new Date();
+  if(!calYear){calYear=now.getFullYear();calMonth=now.getMonth()}
+  const navEl=document.getElementById("calNav");
+  const viewEl=document.getElementById("calView");
+  const legEl=document.getElementById("calLegend");
+  if(!navEl||!viewEl)return;
+  const monthNames=lang==="en"?["January","February","March","April","May","June","July","August","September","October","November","December"]:["一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"];
+  navEl.innerHTML='<button class="btn btn-secondary btn-sm" onclick="calMonthNav(-1)">◀</button><span class="cal-title">'+monthNames[calMonth]+' '+calYear+'</span><button class="btn btn-secondary btn-sm" onclick="calMonthNav(1)">▶</button><button class="btn btn-secondary btn-sm" onclick="calGoToday()">📅 '+t("calToday")+'</button>';
+  const dayLabels=lang==="en"?["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]:["日","一","二","三","四","五","六"];
+  let html='<div class="cal-grid">';
+  dayLabels.forEach(d=>{html+='<div class="cal-head">'+d+'</div>'});
+  const firstDay=new Date(calYear,calMonth,1);
+  const lastDay=new Date(calYear,calMonth+1,0);
+  const startDow=firstDay.getDay();
+  const daysInMonth=lastDay.getDate();
+  const prevLast=new Date(calYear,calMonth,0).getDate();
+  const todayStr=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+  /* 收集所有事件 */
+  const events=new Map();
+  scopeOrders().forEach(o=>{
+    const dd=parseDate(o.dueDate);
+    if(dd){const key=o.dueDate;if(!events.has(key))events.set(key,[]);events.get(key).push({type:"due",oid:o.id,oname:o.name||"",ms:"📌 "+t("calDue")})}
+    (o.milestones||[]).forEach(m=>{
+      const pd=parseDate(m.plannedDate),ad=parseDate(m.actualDate);
+      if(pd&&m.plannedDate){const key=m.plannedDate;if(!events.has(key))events.set(key,[]);const st=mStatus(m)==="overdue"?"overdue":msStatus(m);events.get(key).push({type:st,oid:o.id,oname:o.name||"",ms:m.name||""})}
+    });
+  });
+  /* 上個月補齊 */
+  for(let i=startDow-1;i>=0;i--){const d=prevLast-i;const dateStr=calYear+"-"+String(calMonth).padStart(2,"0")+"-"+String(d).padStart(2,"0");html+='<div class="cal-cell other"><div class="cal-day">'+d+'</div>'+(events.has(dateStr)?renderCalEvents(events.get(dateStr)):"")+'</div>'}
+  /* 本月 */
+  for(let d=1;d<=daysInMonth;d++){const dateStr=calYear+"-"+String(calMonth+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");const isToday=dateStr===todayStr;html+='<div class="cal-cell'+(isToday?' today':'')+'"><div class="cal-day">'+d+'</div>'+(events.has(dateStr)?renderCalEvents(events.get(dateStr)):"")+'</div>'}
+  /* 下個月補齊 */
+  const totalCells=startDow+daysInMonth;const remainder=totalCells%7;if(remainder>0){for(let d=1;d<=7-remainder;d++){html+='<div class="cal-cell other"><div class="cal-day">'+d+'</div></div>'}}
+  html+='</div>';
+  viewEl.innerHTML=html;
+  legEl.innerHTML='<span><i style="background:var(--green)"></i>'+t("calDone")+'</span><span><i style="background:var(--red)"></i>'+t("calOverdue")+'</span><span><i style="background:var(--blue)"></i>'+t("calActive")+'</span><span><i style="background:#60a5fa"></i>'+t("msDoing")+'</span><span><i style="background:var(--amber)"></i>'+t("calDue")+'</span><span style="color:var(--muted);font-size:10px;margin-left:8px">💡 '+t("calClickTip")+'</span>';
+}
+function renderCalEvents(evts){
+  if(!evts||!evts.length)return"";
+  return evts.slice(0,3).map(e=>'<span class="cal-event '+e.type+'" title="'+esc(e.oid)+' — '+esc(e.ms)+'" onclick="viewOrder(\''+esc(e.oid)+'\')">'+esc(e.ms)+'</span>').join("")+(evts.length>3?'<span style="font-size:9px;color:var(--muted)">+' +(evts.length-3)+'...</span>':"");
+}
+function calMonthNav(delta){calMonth+=delta;if(calMonth>11){calMonth=0;calYear++}else if(calMonth<0){calMonth=11;calYear--}renderCalendar()}
+function calGoToday(){const n=new Date();calYear=n.getFullYear();calMonth=n.getMonth();renderCalendar()}
 function renderPerf(){
   if(!data.suppliers.length){document.getElementById("perfView").innerHTML='<div class="empty">'+t("emptySup")+'</div>';return}
   const sups=role==="supplier"?data.suppliers.filter(s=>s.id===currentSupplierId):data.suppliers;
@@ -704,7 +782,7 @@ function delSupplier(id){
 }
 
 /* ==================== 訂單 CRUD ==================== */
-function msRow(m){const sup=role==="supplier";const st=msStatus(m);const sel=["todo","doing","hold","done"].map(k=>'<option value="'+k+'" '+(k===st?"selected":"")+'>'+({todo:t("msTodo"),doing:t("msDoing"),hold:t("msHold"),done:t("msDoneC")})[k]+'</option>').join("");return'<div class="milestone-row"><input class="ms-name" placeholder="'+t("msNamePh")+'" value="'+esc(m.name||"")+'"'+(sup?' readonly':'')+'><input class="ms-date" type="date" value="'+esc(m.plannedDate||"")+'" onchange="msPlannedChanged(this)"><input class="ms-date" type="date" value="'+esc(m.actualDate||"")+'" title="'+t("gActual")+'" onchange="msActualChanged(this)"><select class="ms-status" onchange="msStatusChanged(this)">'+sel+'</select><button class="btn btn-secondary btn-sm" title="'+t("today")+'" onclick="msSetToday(this)">📅</button>'+(sup?'':'<button class="btn btn-danger btn-sm" onclick="msDelRow(this)">✕</button>')+'</div><div class="ms-notes-wrap"><textarea placeholder="'+t("msNotesPh")+'">'+esc(m.notes||"")+'</textarea></div>'}
+function msRow(m){const sup=role==="supplier";const st=msStatus(m);const sel=["todo","doing","hold","done"].map(k=>'<option value="'+k+'" '+(k===st?"selected":"")+'>'+({todo:t("msTodo"),doing:t("msDoing"),hold:t("msHold"),done:t("msDoneC")})[k]+'</option>').join("");const subs=m.substeps||[];const subId="sub_"+Math.random().toString(36).slice(2,8);return'<div class="milestone-row" data-sub-id="'+subId+'"><input class="ms-name" placeholder="'+t("msNamePh")+'" value="'+esc(m.name||"")+'"'+(sup?' readonly':'')+'><input class="ms-date" type="date" value="'+esc(m.plannedDate||"")+'" onchange="msPlannedChanged(this)"><input class="ms-date" type="date" value="'+esc(m.actualDate||"")+'" title="'+t("gActual")+'" onchange="msActualChanged(this)"><select class="ms-status" onchange="msStatusChanged(this)">'+sel+'</select><button class="btn btn-secondary btn-sm" title="'+t("today")+'" onclick="msSetToday(this)">📅</button><span class="ms-sub-toggle" onclick="msToggleSub(this,\''+subId+'\')" title="'+t("subToggle")+'">▶</span>'+(sup?'':'<button class="btn btn-danger btn-sm" onclick="msDelRow(this)">✕</button>')+'</div><div class="ms-notes-wrap"><textarea placeholder="'+t("msNotesPh")+'">'+esc(m.notes||"")+'</textarea></div><div class="ms-sub-wrap hidden" id="'+subId+'">'+renderSubs(subs)+'</div>'}
 function msSetToday(btn){const row=btn.parentElement;const inputs=row.querySelectorAll(".ms-date");const d=new Date();const iso=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");inputs[1].value=iso;const sel=row.querySelector(".ms-status");if(sel)sel.value="done";msMarkOverdue(row)}
 function msActualChanged(inp){const row=inp.parentElement;const sel=row.querySelector(".ms-status");if(inp.value&&sel)sel.value="done";msMarkOverdue(row)}
 function msStatusChanged(sel){const row=sel.parentElement;if(sel.value==="done"){const inputs=row.querySelectorAll(".ms-date");if(!inputs[1].value){const d=new Date();inputs[1].value=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}}msMarkOverdue(row)}
@@ -717,7 +795,7 @@ if(adD&&ordD&&adD<ordD)warn+='<span class="badge red">⚠️ '+t("valActualBefor
 if(pdD&&ordD&&pdD<ordD)warn+='<span class="badge amber">⚠️ '+t("valPlanBeforeOrder")+'</span> ';
 if(!adD&&sel&&sel.value==="done")warn+='<span class="badge amber">⚠️ '+t("valStatusDoneNoDate")+'</span> ';
 let wEl=row.querySelector(".ms-warn");if(!wEl){wEl=document.createElement("div");wEl.className="ms-warn";wEl.style.cssText="font-size:11px;margin:2px 0 4px 4px;line-height:1.6";const notesWrap=row.nextElementSibling;if(notesWrap&&notesWrap.classList.contains("ms-notes-wrap"))notesWrap.before(wEl);else row.appendChild(wEl)}wEl.innerHTML=warn}
-function msDelRow(btn){const row=btn.parentElement;const notes=row.nextElementSibling;if(notes&&notes.classList.contains("ms-notes-wrap"))notes.remove();row.remove()}
+function msDelRow(btn){const row=btn.parentElement;const subId=row.dataset.subId;if(subId){const sw=document.getElementById(subId);if(sw)sw.remove()}const notes=row.nextElementSibling;if(notes&&notes.classList.contains("ms-notes-wrap"))notes.remove();row.remove()}
 function msMarkBeyond(row){if(!row)return;const dueEl=document.getElementById("oDueDate");const due=dueEl?dueEl.value:"";const pd=row.querySelectorAll(".ms-date")[0].value;const bad=!!due&&!!pd&&parseDate(pd)>parseDate(due);row.classList.toggle("ms-beyond",bad);const inp=row.querySelectorAll(".ms-date")[0];if(inp)inp.title=bad?t("beyondDueTip"):t("gPlanned")}
 function msPlannedChanged(inp){const row=inp.parentElement;msMarkOverdue(row);msMarkBeyond(row)}
 function msMarkAll(){document.querySelectorAll("#msEditor .milestone-row").forEach(r=>{msMarkOverdue(r);msMarkBeyond(r);msValidateRow(r)})}
@@ -725,7 +803,12 @@ function msTemplate(){return lang==="en"?["Design / Drawing Approved","Material 
 function msTplRows(){return msTemplate().map(n=>({name:n,plannedDate:"",actualDate:"",status:"todo",notes:""}))}
 function applyMsTpl(){if(document.querySelectorAll("#msEditor .milestone-row").length&&!confirm(t("applyTplQ")))return;document.getElementById("msEditor").innerHTML=msTplRows().map(m=>msRow(m)).join("");msMarkAll()}
 function addMs(){document.getElementById("msEditor").insertAdjacentHTML("beforeend",msRow({}))}
-function readMs(){return[...document.querySelectorAll("#msEditor .milestone-row")].map(r=>{const st=r.querySelector(".ms-status");const actual=r.querySelectorAll(".ms-date")[1].value;const notesWrap=r.nextElementSibling;const notes=notesWrap&&notesWrap.classList.contains("ms-notes-wrap")?notesWrap.querySelector("textarea").value.trim():"";return{name:r.querySelector(".ms-name").value.trim(),plannedDate:r.querySelector(".ms-date").value,actualDate:actual,status:actual?"done":(st?st.value:"todo"),notes}}).filter(m=>m.name||m.plannedDate||m.actualDate||m.notes)}
+function readMs(){const editor=document.getElementById("msEditor");const rows=editor.querySelectorAll(".milestone-row");const result=[];rows.forEach(r=>{const st=r.querySelector(".ms-status");const actual=r.querySelectorAll(".ms-date")[1].value;const subId=r.getAttribute("data-sub-id");let subWrap=null;if(subId)subWrap=document.getElementById(subId);const subs=subWrap?readSubs(subWrap):[];let notes="";const notesWraps=editor.querySelectorAll(".ms-notes-wrap");const allRows=editor.querySelectorAll(".milestone-row");let idx=-1;for(let i=0;i<allRows.length;i++){if(allRows[i]===r){idx=i;break}}if(idx>=0&&idx<notesWraps.length)notes=notesWraps[idx].querySelector("textarea").value.trim();const m={name:r.querySelector(".ms-name").value.trim(),plannedDate:r.querySelector(".ms-date").value,actualDate:actual,status:actual?"done":(st?st.value:"todo"),notes,substeps:subs};result.push(m)});return result.filter(m=>m.name||m.plannedDate||m.actualDate||m.notes)}
+function renderSubs(subs){const addBtn='<div class="ms-sub-add" onclick="msAddSub(this)">'+t("subAdd")+'</div>';if(!subs||!subs.length)return'<div class="empty" style="padding:4px 0;font-size:11px">'+t("subEmpty")+'</div>'+addBtn;return subs.map((s,i)=>'<div class="ms-sub-row"><input class="sub-name" placeholder="'+t("subNamePh")+'" value="'+esc(s.name||"")+'"><input class="sub-date" type="date" value="'+esc(s.plannedDate||"")+'"><select class="sub-status"><option value="todo" '+(s.status==="todo"?"selected":"")+'>'+t("msTodo")+'</option><option value="doing" '+(s.status==="doing"?"selected":"")+'>'+t("msDoing")+'</option><option value="done" '+(s.status==="done"?"selected":"")+'>'+t("msDoneC")+'</option></select><button class="btn btn-danger btn-sm" style="padding:2px 6px;font-size:10px" onclick="msDelSub(this)">✕</button></div>').join("")+addBtn}
+function msToggleSub(toggle,subId){const wrap=document.getElementById(subId);if(!wrap)return;const hidden=wrap.classList.toggle("hidden");toggle.textContent=hidden?"▶":"▼"}
+function msAddSub(el){const wrap=el.parentElement;const subs=readSubs(wrap);subs.push({name:"",plannedDate:"",status:"todo"});wrap.innerHTML=renderSubs(subs)}
+function msDelSub(btn){const wrap=btn.closest(".ms-sub-wrap");const subs=readSubs(wrap);const rows=[...wrap.querySelectorAll(".ms-sub-row")];const idx=rows.indexOf(btn.parentElement);if(idx>=0)subs.splice(idx,1);wrap.innerHTML=renderSubs(subs)}
+function readSubs(wrap){return[...wrap.querySelectorAll(".ms-sub-row")].map(r=>({name:r.querySelector(".sub-name").value.trim(),plannedDate:r.querySelector(".sub-date").value,status:r.querySelector(".sub-status").value})).filter(s=>s.name||s.plannedDate)}
 function openOrder(id){
   const sup=role==="supplier";
   const o=id?data.orders.find(x=>x.id===id):{id:nextOrderId(),name:"",customer:"",supplierId:"",type:"",priority:"P2",orderDate:"",dueDate:"",progress:0,notes:"",milestones:msTplRows()};
@@ -786,7 +869,7 @@ function viewOrder(id){
     '<div style="margin-bottom:8px"><b>'+t("lblProgress")+'：</b>'+progress(o)+'% '+statusBadge(orderStatus(o))+'</div>'+
     '<div style="margin-bottom:8px"><b>'+t("lblNotes")+'：</b>'+esc(o.notes||"-")+'</div>'+
     '<h4 style="margin:14px 0 8px">'+t("msTitle")+'</h4>'+
-    (ms.length?'<div class="table-wrap"><table class="data"><tr><th>'+t("thName")+'</th><th>'+t("thPlanned")+'</th><th>'+t("thActual")+'</th><th>'+t("thMsStatus")+'</th><th>'+t("msNotes")+'</th></tr>'+ms.map(m=>{const pd=parseDate(m.plannedDate),ad=parseDate(m.actualDate);const beyond=dd&&pd&&pd>dd;let badges="";if(beyond)badges+=' <span class="badge amber" title="'+t("beyondDueTip")+'">'+t("beyondDueTag")+'</span>';if(od&&pd&&pd<od)badges+=' <span class="badge amber" title="'+t("valPlanBeforeOrder")+'">⚠️</span>';if(ad){if(pd&&ad>pd){const dl=daysBetween(pd,ad);badges+=' <span class="badge red" title="'+fmt(t("msDelayed"),{d:dl})+'">🔴 '+fmt(t("msDelayed"),{d:dl})+'</span>'}else if(pd&&ad<pd){const el=daysBetween(ad,pd);badges+=' <span class="badge blue" title="'+fmt(t("msEarly"),{d:el})+'">🔵 '+fmt(t("msEarly"),{d:el})+'</span>'}if(dd&&ad>dd){const ov=daysBetween(dd,ad);badges+=' <span class="badge red" title="'+fmt(t("msOverDue"),{d:ov})+'">🔴 '+fmt(t("msOverDue"),{d:ov})+'</span>'}if(od&&ad<od)badges+=' <span class="badge red" title="'+t("valActualBeforeOrder")+'">⚠️</span>'}if(!ad&&m.status==="done")badges+=' <span class="badge amber" title="'+t("valStatusDoneNoDate")+'">⚠️</span>';return'<tr><td>'+esc(m.name)+'</td><td>'+fmtDate(m.plannedDate)+'</td><td>'+fmtDate(m.actualDate)+badges+'</td><td>'+msBadge(m)+'</td><td style="font-size:12px;color:var(--muted);max-width:180px;word-break:break-word">'+(m.notes?esc(m.notes):'-')+'</td></tr>'}).join("")+'</table></div>':'<div class="empty">'+t("noMs")+'</div>')+
+    (ms.length?'<div class="table-wrap"><table class="data"><tr><th>'+t("thName")+'</th><th>'+t("thPlanned")+'</th><th>'+t("thActual")+'</th><th>'+t("thMsStatus")+'</th><th>'+t("msNotes")+'</th></tr>'+ms.map(m=>{const pd=parseDate(m.plannedDate),ad=parseDate(m.actualDate);const beyond=dd&&pd&&pd>dd;let badges="";if(beyond)badges+=' <span class="badge amber" title="'+t("beyondDueTip")+'">'+t("beyondDueTag")+'</span>';if(od&&pd&&pd<od)badges+=' <span class="badge amber" title="'+t("valPlanBeforeOrder")+'">⚠️</span>';if(ad){if(pd&&ad>pd){const dl=daysBetween(pd,ad);badges+=' <span class="badge red" title="'+fmt(t("msDelayed"),{d:dl})+'">🔴 '+fmt(t("msDelayed"),{d:dl})+'</span>'}else if(pd&&ad<pd){const el=daysBetween(ad,pd);badges+=' <span class="badge blue" title="'+fmt(t("msEarly"),{d:el})+'">🔵 '+fmt(t("msEarly"),{d:el})+'</span>'}if(dd&&ad>dd){const ov=daysBetween(dd,ad);badges+=' <span class="badge red" title="'+fmt(t("msOverDue"),{d:ov})+'">🔴 '+fmt(t("msOverDue"),{d:ov})+'</span>'}if(od&&ad<od)badges+=' <span class="badge red" title="'+t("valActualBeforeOrder")+'">⚠️</span>'}if(!ad&&m.status==="done")badges+=' <span class="badge amber" title="'+t("valStatusDoneNoDate")+'">⚠️</span>';const subs=m.substeps||[];const subRows=subs.length?'<tr class="sub-row"><td colspan="5" style="padding:4px 12px 4px 28px;background:#f8fafc;font-size:11px;border-top:none">'+subs.map(s=>'<div style="display:flex;gap:8px;align-items:center;padding:2px 0"><span>'+(s.status==="done"?'✅':s.status==="doing"?'🔵':'⬜')+'</span><span>'+esc(s.name||"")+'</span><span style="color:var(--muted)">'+fmtDate(s.plannedDate)+'</span></div>').join("")+'</td></tr>':'';return'<tr><td>'+esc(m.name)+'</td><td>'+fmtDate(m.plannedDate)+'</td><td>'+fmtDate(m.actualDate)+badges+'</td><td>'+msBadge(m)+'</td><td style="font-size:12px;color:var(--muted);max-width:180px;word-break:break-word">'+(m.notes?esc(m.notes):'-')+'</td></tr>'+subRows}).join("")+'</table></div>':'<div class="empty">'+t("noMs")+'</div>')+
     (role==="supplier"?'<div style="margin-top:14px;text-align:right"><button class="btn '+(o.needHelp?'btn-secondary':'btn-primary')+' btn-sm" onclick="toggleNeedHelp(\''+esc(o.id)+'\');closeModal()">'+(o.needHelp?t("helpClear"):t("needHelp"))+'</button>'+(o.needHelp?'<span style="margin-left:8px;color:var(--amber);font-size:13px">⚠️ '+t("helpActive")+'</span>':'')+'</div>':'');
   document.getElementById("modal").classList.remove("hidden");
 }
