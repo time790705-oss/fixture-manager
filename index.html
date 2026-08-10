@@ -120,14 +120,14 @@ html.dark .field input,html.dark .field select,html.dark .field textarea,html.da
 .storage-fill{height:100%;border-radius:4px}
 /* Modal */
 .modal-bg{position:fixed;inset:0;background:#0f172a70;display:grid;place-items:center;padding:20px;z-index:1000}
-.modal-box{width:min(640px,100%);max-height:90vh;overflow-y:auto;background:var(--card);border-radius:14px;padding:24px;box-shadow:0 20px 60px #00000030}
+.modal-box{width:min(760px,100%);max-height:90vh;overflow-y:auto;background:var(--card);border-radius:14px;padding:24px;box-shadow:0 20px 60px #00000030}
 .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .modal-head h3{font-size:18px;font-weight:700}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
-.milestone-row{display:flex;gap:6px;align-items:center;margin-bottom:2px}
+.milestone-row{display:flex;gap:6px;align-items:center;margin-bottom:2px;overflow-x:auto;padding-bottom:2px}
 .milestone-row input,.milestone-row select{padding:7px 9px;border:1px solid #cbd5e1;border-radius:6px}
-.milestone-row .ms-name{flex:2}
-.milestone-row .ms-date{flex:1.4;font-size:12px}
+.milestone-row .ms-name{flex:3;min-width:140px}
+.milestone-row .ms-date{flex:1;font-size:12px;min-width:130px}
 .milestone-row .ms-status{flex:1.2;font-size:12px}
 .milestone-row.ms-over{background:rgba(220,53,69,.07);outline:1px solid rgba(220,53,69,.35);border-radius:6px}
 .milestone-row.ms-beyond{background:rgba(245,158,11,.10);outline:2px solid rgba(245,158,11,.65);border-radius:6px}
@@ -423,6 +423,21 @@ chaseSubject:"[Chase] {id} overdue reminder",chaseHi:"Hi,",chaseBody:"The follow
 };
 let lang=localStorage.getItem("jigV3Lang")||"zh";
 function t(k){return (I18N[lang]&&I18N[lang][k])||I18N.zh[k]||k}
+/* 標準里程碑名稱翻譯對照表 */
+const MS_NAME_MAP={
+  "圖面拆解確認":"Drawing Disassembly","原材料採購完成":"Raw Material Purchase",
+  "標準件採購完成":"STD Part Purchase","加工完成":"Machining",
+  "表面處理完成":"Surface Treatment","組裝完成":"Assembly",
+  "OQC 檢驗完成":"OQC Inspection","出運（ETD）":"Shipment (ETD)",
+  "到貨檢驗（Inspection）":"Incoming Inspection","收貨入庫（GRN）":"GRN (Receiving)",
+  "Drawing Disassembly":"圖面拆解確認","Raw Material Purchase":"原材料採購完成",
+  "STD Part Purchase":"標準件採購完成","Machining":"加工完成",
+  "Surface Treatment":"表面處理完成","Assembly":"組裝完成",
+  "OQC Inspection":"OQC 檢驗完成","Shipment (ETD)":"出運（ETD）",
+  "Incoming Inspection":"到貨檢驗（Inspection）","GRN (Receiving)":"收貨入庫（GRN）"
+};
+function translateMsName(name){if(!name)return name;return MS_NAME_MAP[name]||name}
+function translateAllMsNames(){document.querySelectorAll(".ms-name").forEach(inp=>{const v=translateMsName(inp.value);if(v!==inp.value)inp.value=v})}
 function toggleLang(){lang=lang==="zh"?"en":"zh";localStorage.setItem("jigV3Lang",lang);applyLang()}
 function applyLang(){
   document.querySelectorAll("[data-i18n]").forEach(el=>{el.textContent=t(el.dataset.i18n)});
@@ -431,6 +446,7 @@ function applyLang(){
   const lb2=document.getElementById("langBtnLogin");if(lb2)lb2.textContent=lang==="zh"?"EN":"中文";
   if(typeof data!=="undefined"&&data)populateFilters();
   renderAll();go(page);
+  translateAllMsNames();
 }
 function toggleTheme(){const dark=document.documentElement.classList.toggle("dark");localStorage.setItem("jigV3Theme",dark?"dark":"light");const ic=dark?"☀️":"🌙";const a=document.getElementById("themeBtn");if(a)a.textContent=ic;const b=document.getElementById("themeBtnLogin");if(b)b.textContent=ic}
 function toggleThemeLogin(){toggleTheme()}
@@ -564,7 +580,7 @@ function renderDashboard(){
   const due=[];
   os.forEach(o=>(o.milestones||[]).forEach(m=>{const d=parseDate(m.plannedDate);if(d&&!m.actualDate){const days=daysBetween(today(),d);if(days>=0&&days<=14)due.push({o,m,days})}}));
   due.sort((a,b)=>a.days-b.days);
-  document.getElementById("dashDue").innerHTML=due.slice(0,8).map(x=>{const p=progress(x.o);const lowWarn=x.days<=3&&p<50?'<br><span style="color:var(--red);font-size:11px">'+fmt(t("warnLowProg"),{d:x.days,p:p})+'</span>':'';return'<div style="padding:7px 0;border-bottom:1px solid var(--line)"><b>'+esc(x.o.id)+'</b> '+esc(x.m.name||"")+'<br><small style="color:'+(x.days<=3?"var(--red)":"var(--muted)")+'">'+fmt(t("dueInD"),{d:x.days})+' · '+fmtDate(x.m.plannedDate)+'</small>'+lowWarn+'</div>'}).join("")||'<div class="empty">'+t("noDue")+'</div>';
+  document.getElementById("dashDue").innerHTML=due.slice(0,8).map(x=>{const p=progress(x.o);const lowWarn=x.days<=3&&p<50?'<br><span style="color:var(--red);font-size:11px">'+fmt(t("warnLowProg"),{d:x.days,p:p})+'</span>':'';return'<div style="padding:7px 0;border-bottom:1px solid var(--line)"><b>'+esc(x.o.id)+'</b> '+esc(translateMsName(x.m.name)||"")+'<br><small style="color:'+(x.days<=3?"var(--red)":"var(--muted)")+'">'+fmt(t("dueInD"),{d:x.days})+' · '+fmtDate(x.m.plannedDate)+'</small>'+lowWarn+'</div>'}).join("")||'<div class="empty">'+t("noDue")+'</div>';
   const al=[];
   os.forEach(o=>(o.milestones||[]).forEach(m=>{const d=parseDate(m.plannedDate);if(d&&!m.actualDate&&d<today())al.push({o,m,days:daysBetween(d,today())})}));
   /* #10: 同一供應商短期多筆逾期 */
@@ -644,7 +660,7 @@ function renderAlerts(){
     html+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'+fmt(t("alertSum"),{o:groups.length,m:arr.length})+' <button class="btn btn-secondary btn-sm" onclick="resolveAllAlerts()">✔ '+t("resolveAll")+'</button></div>';
     html+='<div class="table-wrap"><table class="data"><tr><th>'+t("thOrder")+'</th><th>'+t("thMilestone")+'</th><th>'+t("thPlanned")+'</th><th>'+t("thOverDays")+'</th><th>'+t("msNotes")+'</th><th>'+t("thAction")+'</th></tr>';
     groups.forEach(g=>{
-      g.items.forEach((x,i)=>{html+='<tr>'+(i===0?'<td rowspan="'+g.items.length+'"><b>'+esc(g.o.id)+'</b><br>'+statusBadge("overdue")+(role==="admin"?'<br><button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="chaseOrder(\''+esc(g.o.id)+'\')">'+t("chase")+'</button>':'')+'</td>':'')+'<td>'+esc(x.m.name)+' '+msBadge(x.m)+'</td><td>'+fmtDate(x.m.plannedDate)+'</td><td style="color:var(--red);font-weight:700">'+x.days+'</td><td style="font-size:12px;max-width:160px;word-break:break-word">'+(x.m.notes?'<span style="color:var(--amber)">💬 </span>'+esc(x.m.notes):'<span style="color:var(--muted)">-</span>')+'</td><td><button class="btn btn-secondary btn-sm" onclick="resolveAlert(\''+esc(x.key)+'\')">✔ '+t("resolvedBtn")+'</button></td></tr>'});
+      g.items.forEach((x,i)=>{html+='<tr>'+(i===0?'<td rowspan="'+g.items.length+'"><b>'+esc(g.o.id)+'</b><br>'+statusBadge("overdue")+(role==="admin"?'<br><button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="chaseOrder(\''+esc(g.o.id)+'\')">'+t("chase")+'</button>':'')+'</td>':'')+'<td>'+esc(translateMsName(x.m.name))+' '+msBadge(x.m)+'</td><td>'+fmtDate(x.m.plannedDate)+'</td><td style="color:var(--red);font-weight:700">'+x.days+'</td><td style="font-size:12px;max-width:160px;word-break:break-word">'+(x.m.notes?'<span style="color:var(--amber)">💬 </span>'+esc(x.m.notes):'<span style="color:var(--muted)">-</span>')+'</td><td><button class="btn btn-secondary btn-sm" onclick="resolveAlert(\''+esc(x.key)+'\')">✔ '+t("resolvedBtn")+'</button></td></tr>'});
     });
     html+='</table></div>';
   }
@@ -697,8 +713,8 @@ function renderGantt(){
       let ep;
       if(m.actualDate){const ad=parseDate(m.actualDate);if(ad)ep=daysBetween(min,ad)/total*100;else ep=sp+3}else ep=sp+3;
       const w=Math.max(2.5,ep-sp);
-      const ad2=parseDate(m.actualDate);let delayInfo="";if(pd&&ad2){if(ad2>pd)delayInfo="\n🔴 "+fmt(t("msDelayed"),{d:daysBetween(pd,ad2)});else if(ad2<pd)delayInfo="\n🔵 "+fmt(t("msEarly"),{d:daysBetween(ad2,pd)})}const msProgVal=Number(m.msProgress)||0;const title=(m.name||t("msDefault"))+"\n"+msStatusText(msStatus(m))+"\n"+t("msProgressL")+": "+msProgVal+"%\n"+t("gPlanned")+": "+fmtDate(m.plannedDate)+"\n"+t("gActual")+": "+fmtDate(m.actualDate)+delayInfo+(m.notes?"\n📝 "+m.notes:"");
-      html+='<div class="gantt-bar '+st+'" style="left:'+sp+'%;width:'+w+'%" title="'+esc(title)+'">'+esc(m.name||"")+'</div>';
+      const ad2=parseDate(m.actualDate);let delayInfo="";if(pd&&ad2){if(ad2>pd)delayInfo="\n🔴 "+fmt(t("msDelayed"),{d:daysBetween(pd,ad2)});else if(ad2<pd)delayInfo="\n🔵 "+fmt(t("msEarly"),{d:daysBetween(ad2,pd)})}const msProgVal=Number(m.msProgress)||0;const title=(translateMsName(m.name)||t("msDefault"))+"\n"+msStatusText(msStatus(m))+"\n"+t("msProgressL")+": "+msProgVal+"%\n"+t("gPlanned")+": "+fmtDate(m.plannedDate)+"\n"+t("gActual")+": "+fmtDate(m.actualDate)+delayInfo+(m.notes?"\n📝 "+m.notes:"");
+      html+='<div class="gantt-bar '+st+'" style="left:'+sp+'%;width:'+w+'%" title="'+esc(title)+'">'+esc(translateMsName(m.name)||"")+'</div>';
     });
     html+="</div></div>";
   });
@@ -732,7 +748,7 @@ function renderCalendar(){
     if(dd){const key=o.dueDate;if(!events.has(key))events.set(key,[]);events.get(key).push({type:"due",oid:o.id,oname:o.name||"",ms:"📌 "+t("calDue")})}
     (o.milestones||[]).forEach(m=>{
       const pd=parseDate(m.plannedDate),ad=parseDate(m.actualDate);
-      if(pd&&m.plannedDate){const key=m.plannedDate;if(!events.has(key))events.set(key,[]);const st=mStatus(m)==="overdue"?"overdue":msStatus(m);events.get(key).push({type:st,oid:o.id,oname:o.name||"",ms:m.name||""})}
+      if(pd&&m.plannedDate){const key=m.plannedDate;if(!events.has(key))events.set(key,[]);const st=mStatus(m)==="overdue"?"overdue":msStatus(m);events.get(key).push({type:st,oid:o.id,oname:o.name||"",ms:translateMsName(m.name)||""})}
     });
   });
   /* 上個月補齊 */
@@ -774,7 +790,7 @@ function renderPerf(){
 }
 function renderNotif(){
   const items=[];
-  scopeOrders().forEach(o=>(o.milestones||[]).forEach(m=>{const d=parseDate(m.plannedDate);if(d&&!m.actualDate){const days=daysBetween(d,today());if(days>=-7&&days<=7){items.push({key:o.id+"|"+m.name,text:esc(o.id)+" · "+esc(m.name||"")+" · "+(days>0?fmt(t("overDays"),{d:days}):days===0?fmt(t("overDays"),{d:0}):fmt(t("dueInD"),{d:-days})),days,isRead:notif[o.id+"|"+m.name]===true})}}}));
+  scopeOrders().forEach(o=>(o.milestones||[]).forEach(m=>{const d=parseDate(m.plannedDate);if(d&&!m.actualDate){const days=daysBetween(d,today());if(days>=-7&&days<=7){items.push({key:o.id+"|"+m.name,text:esc(o.id)+" · "+esc(translateMsName(m.name)||"")+" · "+(days>0?fmt(t("overDays"),{d:days}):days===0?fmt(t("overDays"),{d:0}):fmt(t("dueInD"),{d:-days})),days,isRead:notif[o.id+"|"+m.name]===true})}}}));
   items.sort((a,b)=>b.days-a.days);
   if(!items.length){document.getElementById("notifView").innerHTML='<div class="empty">'+t("emptyNotif")+'</div>';return}
   document.getElementById("notifView").innerHTML=items.map(x=>{
@@ -801,9 +817,9 @@ function checkBackupReminder(){
 function weeklyReport(){
   const os=scopeOrders();
   const done=os.filter(o=>orderStatus(o)==="done").map(o=>o.id+" — "+(o.project?(o.project+"/"):"")+(o.phase?(o.phase+" "):"")+(o.name||""));
-  const over=[];os.forEach(o=>(o.milestones||[]).forEach(m=>{const d=parseDate(m.plannedDate);if(d&&!m.actualDate&&d<today()){let line=o.id+" · "+(o.project?(o.project+"/"):"")+(o.phase?(o.phase+" "):"")+(m.name||"")+" ("+fmt(t("overDays"),{d:daysBetween(d,today())})+")";if(m.notes)line+=" ["+m.notes+"]";over.push(line)}}));
-  const delayed=[];os.forEach(o=>(o.milestones||[]).forEach(m=>{const pd=parseDate(m.plannedDate),ad=parseDate(m.actualDate);if(pd&&ad&&ad>pd){const dl=daysBetween(pd,ad);delayed.push(o.id+" · "+(o.project?(o.project+"/"):"")+(o.phase?(o.phase+" "):"")+(m.name||"")+" ("+fmt(t("msDelayed"),{d:dl})+")")}}));
-  const due=[];os.forEach(o=>(o.milestones||[]).forEach(m=>{const d=parseDate(m.plannedDate);if(d&&!m.actualDate){const days=daysBetween(today(),d);if(days>=0&&days<=7)due.push(o.id+" · "+(o.project?(o.project+"/"):"")+(o.phase?(o.phase+" "):"")+(m.name||"")+" — "+fmtDate(m.plannedDate))}}));
+  const over=[];os.forEach(o=>(o.milestones||[]).forEach(m=>{const d=parseDate(m.plannedDate);if(d&&!m.actualDate&&d<today()){let line=o.id+" · "+(o.project?(o.project+"/"):"")+(o.phase?(o.phase+" "):"")+(translateMsName(m.name)||"")+" ("+fmt(t("overDays"),{d:daysBetween(d,today())})+")";if(m.notes)line+=" ["+m.notes+"]";over.push(line)}}));
+  const delayed=[];os.forEach(o=>(o.milestones||[]).forEach(m=>{const pd=parseDate(m.plannedDate),ad=parseDate(m.actualDate);if(pd&&ad&&ad>pd){const dl=daysBetween(pd,ad);delayed.push(o.id+" · "+(o.project?(o.project+"/"):"")+(o.phase?(o.phase+" "):"")+(translateMsName(m.name)||"")+" ("+fmt(t("msDelayed"),{d:dl})+")")}}));
+  const due=[];os.forEach(o=>(o.milestones||[]).forEach(m=>{const d=parseDate(m.plannedDate);if(d&&!m.actualDate){const days=daysBetween(today(),d);if(days>=0&&days<=7)due.push(o.id+" · "+(o.project?(o.project+"/"):"")+(o.phase?(o.phase+" "):"")+(translateMsName(m.name)||"")+" — "+fmtDate(m.plannedDate))}}));
   const act=os.filter(o=>orderStatus(o)==="active"||orderStatus(o)==="pending").map(o=>o.id+" — "+(o.project?(o.project+"/"):"")+(o.phase?(o.phase+" "):"")+(o.name||"")+" ("+progress(o)+"%)");
   const txt=t("reportTitle")+" "+fmtDate(new Date().toISOString())+"\n\n"+t("wrDone")+":\n"+(done.length?done.map(x=>"  • "+x).join("\n"):"  "+t("none"))+"\n\n"+t("wrOverdue")+":\n"+(over.length?over.map(x=>"  • "+x).join("\n"):"  "+t("none"))+"\n\n🔴 延遲完成:\n"+(delayed.length?delayed.map(x=>"  • "+x).join("\n"):"  "+t("none"))+"\n\n"+t("wrDue")+":\n"+(due.length?due.map(x=>"  • "+x).join("\n"):"  "+t("none"))+"\n\n"+t("wrActive")+":\n"+(act.length?act.map(x=>"  • "+x).join("\n"):"  "+t("none"));
   document.getElementById("modalSave").style.display="none";
@@ -1000,7 +1016,7 @@ function saveOrder(){
   const allDone=obj.milestones.every(m=>m.actualDate||m.status==="done");
   const notDoneMs=obj.milestones.filter(m=>!m.actualDate&&m.status!="done");
   if(calcProgNow>=100&&notDoneMs.length&&!confirm(fmt(t("valOrderDoneMsNotDone"),{n:notDoneMs.length})))return;
-  if(obj.dueDate){const dd=parseDate(obj.dueDate);const over=obj.milestones.filter(m=>{const pd=parseDate(m.plannedDate);return pd&&dd&&pd>dd});if(over.length&&!confirm(fmt(t("msBeyondDue"),{list:over.map(m=>"• "+(m.name||t("msDefault"))+" ("+fmtDate(m.plannedDate)+")").join("\n")})))return}
+  if(obj.dueDate){const dd=parseDate(obj.dueDate);const over=obj.milestones.filter(m=>{const pd=parseDate(m.plannedDate);return pd&&dd&&pd>dd});if(over.length&&!confirm(fmt(t("msBeyondDue"),{list:over.map(m=>"• "+(translateMsName(m.name)||t("msDefault"))+" ("+fmtDate(m.plannedDate)+")").join("\n")})))return}
   /* #6: 進度不一致（已自動計算，跳過） */
   /* #7: 日期層級檢查 */
   const custEtaD=parseDate(obj.customerTargetEta);const targetEtaD=parseDate(obj.dueDate);
@@ -1036,7 +1052,7 @@ function viewOrder(id){
     '<div style="margin-bottom:6px"><b>'+t("oSupplierConfirmL")+'：</b>'+fmtDate(o.supplierConfirmDate)+' <b style="margin-left:12px">'+t("lblProgress")+'：</b>'+progress(o)+'% '+statusBadge(orderStatus(o))+'</div>'+
     '</div>'+
     '<h4 style="margin:14px 0 8px">'+t("msTitle")+'</h4>'+
-    (ms.length?'<div class="table-wrap"><table class="data"><tr><th>'+t("thName")+'</th><th>'+t("thPlanned")+'</th><th>'+t("thActual")+'</th><th>'+t("thMsStatus")+'</th><th>'+t("msProgressL")+'</th><th>'+t("msNotes")+'</th></tr>'+ms.map(m=>{const pd=parseDate(m.plannedDate),ad=parseDate(m.actualDate);const beyond=dd&&pd&&pd>dd;let badges="";if(beyond)badges+=' <span class="badge amber" title="'+t("beyondDueTip")+'">'+t("beyondDueTag")+'</span>';if(od&&pd&&pd<od)badges+=' <span class="badge amber" title="'+t("valPlanBeforeOrder")+'">⚠️</span>';if(ad){if(pd&&ad>pd){const dl=daysBetween(pd,ad);badges+=' <span class="badge red" title="'+fmt(t("msDelayed"),{d:dl})+'">🔴 '+fmt(t("msDelayed"),{d:dl})+'</span>'}else if(pd&&ad<pd){const el=daysBetween(ad,pd);badges+=' <span class="badge blue" title="'+fmt(t("msEarly"),{d:el})+'">🔵 '+fmt(t("msEarly"),{d:el})+'</span>'}if(dd&&ad>dd){const ov=daysBetween(dd,ad);badges+=' <span class="badge red" title="'+fmt(t("msOverDue"),{d:ov})+'">🔴 '+fmt(t("msOverDue"),{d:ov})+'</span>'}if(od&&ad<od)badges+=' <span class="badge red" title="'+t("valActualBeforeOrder")+'">⚠️</span>'}if(!ad&&m.status==="done")badges+=' <span class="badge amber" title="'+t("valStatusDoneNoDate")+'">⚠️</span>';const msProg=Number(m.msProgress)||0;const progColor=msProg>=80?"var(--green)":msProg>=40?"var(--blue)":msProg>0?"var(--amber)":"#cbd5e1";const progBar='<div class="pbar"><span class="pbar-val">'+msProg+'%</span><div class="pbar-track"><div class="pbar-fill" style="width:'+msProg+'%;background:'+progColor+'"></div></div></div>';const subs=m.substeps||[];const subRows=subs.length?'<tr class="sub-row"><td colspan="6" style="padding:4px 12px 4px 28px;background:#f8fafc;font-size:11px;border-top:none">'+subs.map(s=>'<div style="display:flex;gap:8px;align-items:center;padding:2px 0"><span>'+(s.status==="done"?'✅':s.status==="doing"?'🔵':'⬜')+'</span><span>'+esc(s.name||"")+'</span><span style="color:var(--muted)">'+fmtDate(s.plannedDate)+'</span></div>').join("")+'</td></tr>':'';return'<tr><td>'+esc(m.name)+'</td><td>'+fmtDate(m.plannedDate)+'</td><td>'+fmtDate(m.actualDate)+badges+'</td><td>'+msBadge(m)+'</td><td>'+progBar+'</td><td style="font-size:12px;color:var(--muted);max-width:180px;word-break:break-word">'+(m.notes?esc(m.notes):'-')+'</td></tr>'+subRows}).join("")+'</table></div>':'<div class="empty">'+t("noMs")+'</div>')+
+    (ms.length?'<div class="table-wrap"><table class="data"><tr><th>'+t("thName")+'</th><th>'+t("thPlanned")+'</th><th>'+t("thActual")+'</th><th>'+t("thMsStatus")+'</th><th>'+t("msProgressL")+'</th><th>'+t("msNotes")+'</th></tr>'+ms.map(m=>{const pd=parseDate(m.plannedDate),ad=parseDate(m.actualDate);const beyond=dd&&pd&&pd>dd;let badges="";if(beyond)badges+=' <span class="badge amber" title="'+t("beyondDueTip")+'">'+t("beyondDueTag")+'</span>';if(od&&pd&&pd<od)badges+=' <span class="badge amber" title="'+t("valPlanBeforeOrder")+'">⚠️</span>';if(ad){if(pd&&ad>pd){const dl=daysBetween(pd,ad);badges+=' <span class="badge red" title="'+fmt(t("msDelayed"),{d:dl})+'">🔴 '+fmt(t("msDelayed"),{d:dl})+'</span>'}else if(pd&&ad<pd){const el=daysBetween(ad,pd);badges+=' <span class="badge blue" title="'+fmt(t("msEarly"),{d:el})+'">🔵 '+fmt(t("msEarly"),{d:el})+'</span>'}if(dd&&ad>dd){const ov=daysBetween(dd,ad);badges+=' <span class="badge red" title="'+fmt(t("msOverDue"),{d:ov})+'">🔴 '+fmt(t("msOverDue"),{d:ov})+'</span>'}if(od&&ad<od)badges+=' <span class="badge red" title="'+t("valActualBeforeOrder")+'">⚠️</span>'}if(!ad&&m.status==="done")badges+=' <span class="badge amber" title="'+t("valStatusDoneNoDate")+'">⚠️</span>';const msProg=Number(m.msProgress)||0;const progColor=msProg>=80?"var(--green)":msProg>=40?"var(--blue)":msProg>0?"var(--amber)":"#cbd5e1";const progBar='<div class="pbar"><span class="pbar-val">'+msProg+'%</span><div class="pbar-track"><div class="pbar-fill" style="width:'+msProg+'%;background:'+progColor+'"></div></div></div>';const subs=m.substeps||[];const subRows=subs.length?'<tr class="sub-row"><td colspan="6" style="padding:4px 12px 4px 28px;background:#f8fafc;font-size:11px;border-top:none">'+subs.map(s=>'<div style="display:flex;gap:8px;align-items:center;padding:2px 0"><span>'+(s.status==="done"?'✅':s.status==="doing"?'🔵':'⬜')+'</span><span>'+esc(s.name||"")+'</span><span style="color:var(--muted)">'+fmtDate(s.plannedDate)+'</span></div>').join("")+'</td></tr>':'';return'<tr><td>'+esc(translateMsName(m.name))+'</td><td>'+fmtDate(m.plannedDate)+'</td><td>'+fmtDate(m.actualDate)+badges+'</td><td>'+msBadge(m)+'</td><td>'+progBar+'</td><td style="font-size:12px;color:var(--muted);max-width:180px;word-break:break-word">'+(m.notes?esc(m.notes):'-')+'</td></tr>'+subRows}).join("")+'</table></div>':'<div class="empty">'+t("noMs")+'</div>')+
     (role==="supplier"?'<div style="margin-top:14px;text-align:right"><button class="btn '+(o.needHelp?'btn-secondary':'btn-primary')+' btn-sm" onclick="toggleNeedHelp(\''+esc(o.id)+'\');closeModal()">'+(o.needHelp?t("helpClear"):t("needHelp"))+'</button>'+(o.needHelp?'<span style="margin-left:8px;color:var(--amber);font-size:13px">⚠️ '+t("helpActive")+'</span>':'')+'</div>':'');
   document.getElementById("modal").classList.remove("hidden");
 }
@@ -1048,7 +1064,7 @@ function exportExcel(){
   if(!xlsxReady){toast("Excel module not loaded / Excel 模組未載入","err");return}
   const ss=data.suppliers.map(s=>({"Supplier ID":s.id,"Supplier Name":s.name,"Login Code":s.loginCode||"","Login Password":s.loginPwd||"","Contact":s.contact,"Phone":s.phone,"Email":s.email,"Category":s.category,"Status":SUP_STATUS_EN[s.status]||s.status,"Notes":s.notes}));
   const os=data.orders.map(o=>({"Order ID":o.id,"Order Name":o.name,"Customer":o.customer,"Project":o.project||"","Phase":o.phase||"","Type":o.type,"Level":o.level||"","Spec.":o.spec||"","Customer KO date":o.customerKoDate||"","Customer target ETA":o.customerTargetEta||"","SCM":o.scm||"","Buyer":o.buyer||"","Supplier ID":o.supplierId,"Supplier":supplierName(o.supplierId),"Supplier Region":o.supplierRegion||"","Quantity":o.quantity||0,"Priority":priText(o.priority),"KO to supplier":o.koToSupplierDate||"","Target ETA":o.dueDate,"Supplier Confirm ETA":o.supplierConfirmDate||"","Progress":progress(o),"Status":ORD_STATUS_EN[orderStatus(o)]||orderStatus(o),"Notes":o.notes}));
-  const ms=[];data.orders.forEach(o=>(o.milestones||[]).forEach(m=>ms.push({"Order ID":o.id,"Milestone":m.name,"Planned Date":m.plannedDate,"Actual Date":m.actualDate,"Status":MS_STATUS_EN[msStatus(m)]||"Not Started","Progress":Number(m.msProgress)||0,"Notes":m.notes||""})));
+  const ms=[];data.orders.forEach(o=>(o.milestones||[]).forEach(m=>ms.push({"Order ID":o.id,"Milestone":translateMsName(m.name),"Planned Date":m.plannedDate,"Actual Date":m.actualDate,"Status":MS_STATUS_EN[msStatus(m)]||"Not Started","Progress":Number(m.msProgress)||0,"Notes":m.notes||""})));
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(ss),"Suppliers");
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(os),"Orders");
@@ -1169,7 +1185,7 @@ function exportMyExcel(){
   if(!xlsxReady){toast("Excel module not loaded","err");return}
   const os=scopeOrders();
   const rows=os.map(o=>({"Order ID":o.id,"Order Name":o.name,"Customer":o.customer,"Type":o.type,"Priority":o.priority,"Order Date":o.orderDate,"Final Due":o.dueDate,"Progress":progress(o),"Status":ORD_STATUS_EN[orderStatus(o)]||orderStatus(o),"Notes":o.notes}));
-  const ms=[];os.forEach(o=>(o.milestones||[]).forEach(m=>ms.push({"Order ID":o.id,"Milestone":m.name,"Planned Date":m.plannedDate,"Actual Date":m.actualDate,"Status":MS_STATUS_EN[msStatus(m)]||"Not Started","Notes":m.notes||""})));
+  const ms=[];os.forEach(o=>(o.milestones||[]).forEach(m=>ms.push({"Order ID":o.id,"Milestone":translateMsName(m.name),"Planned Date":m.plannedDate,"Actual Date":m.actualDate,"Status":MS_STATUS_EN[msStatus(m)]||"Not Started","Notes":m.notes||""})));
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),"Orders");
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(ms),"Milestones");
@@ -1185,7 +1201,7 @@ function batchUpdate(){
   let html='<div style="margin-bottom:10px;padding:8px;background:#f0f6ff;border:1px solid #bcd4f5;border-radius:6px;font-size:13px;color:#1a5da8">'+t("batchHint")+'</div>';
   html+='<div style="margin-bottom:10px"><label><input type="checkbox" id="batchAll" onchange="document.querySelectorAll(\'.batch-chk\').forEach(c=>c.checked=this.checked)"> '+t("batchSelectAll")+'</label></div>';
   html+='<div class="table-wrap"><table class="data"><tr><th></th><th>'+t("thOrder")+'</th><th>'+t("thName")+'</th><th>'+t("thLatest")+'</th></tr>';
-  html+=os.map(o=>{const lm=latestMs(o);return'<tr><td><input type="checkbox" class="batch-chk" value="'+esc(o.id)+'"></td><td><b>'+esc(o.id)+'</b></td><td>'+esc(o.name)+'</td><td>'+(lm?esc(lm.name)+" "+msBadge(lm):"-")+'</td></tr>'}).join("");
+  html+=os.map(o=>{const lm=latestMs(o);return'<tr><td><input type="checkbox" class="batch-chk" value="'+esc(o.id)+'"></td><td><b>'+esc(o.id)+'</b></td><td>'+esc(o.name)+'</td><td>'+(lm?esc(translateMsName(lm.name))+" "+msBadge(lm):"-")+'</td></tr>'}).join("");
   html+='</table></div>';
   html+='<div style="margin-top:12px"><label><b>'+t("batchMs")+'</b></label><select id="batchMsSel" style="width:100%;padding:8px;margin-top:4px;border:1px solid #cbd5e1;border-radius:6px">'+allMsNames.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join("")+'</select></div>';
   html+='<div style="margin-top:8px"><label><b>'+t("batchDate")+'</b></label><input id="batchDateVal" type="date" style="width:100%;padding:8px;margin-top:4px;border:1px solid #cbd5e1;border-radius:6px"></div>';
