@@ -336,7 +336,7 @@ html.dark .ms-progress input{background:#101a30;border-color:#33436b;color:var(-
 <select id="orderFilter" onchange="orderPage=1;renderOrders()"><option value="">全部狀態</option></select>
 <select id="orderSupplierFilter" data-admin onchange="orderPage=1;renderOrders()"><option value="">全部供應商</option></select>
 <select id="orderRegionFilter" onchange="orderPage=1;renderOrders()"><option value="">全部地區</option></select>
-<button class="btn btn-primary btn-sm" data-admin onclick="openOrder()" data-i18n="add">＋ 新增</button>
+<button class="btn btn-primary btn-sm" data-create-order onclick="openOrder()" data-i18n="add">＋ 新增</button>
 <button class="btn btn-secondary btn-sm" data-admin onclick="exportCSV()">📤 CSV</button>
 <button class="btn btn-primary btn-sm" data-supplier onclick="batchUpdate()">📝 批次更新</button></div>
 <div id="orderTable"></div>
@@ -562,6 +562,8 @@ function applyPermissions(){
   document.querySelectorAll("[data-admin]").forEach(el=>el.style.display=isAdmin?"":"none");
   document.querySelectorAll("[data-supplier]").forEach(el=>el.style.display=isSup?"":"none");
   document.querySelectorAll("[data-office]").forEach(el=>el.style.display=isOffice?"":"none");
+    const canCreateOrder=isAdmin||role==="opm";
+    document.querySelectorAll("[data-create-order]").forEach(el=>el.style.display=canCreateOrder?"":"none");
   const roleNames={admin:t("roleAdmin"),opm:t("roleOPM"),tpm:t("roleTPM"),sourcing:t("roleSourcing"),quotation:t("roleQuotation"),supplier:"🏭 "+supplierName(currentSupplierId),qa:t("roleQA"),buyer:t("roleBuyer")};
   document.getElementById("roleBadge").textContent=roleNames[role]||role;
   document.getElementById("roleBadge").className="role-badge "+(isAdmin||isOffice?"admin":"supplier");
