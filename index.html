@@ -1778,21 +1778,31 @@ function showCFTDetail(idx){
     const r=gsData[i];
     h+='<tr>';
     cols.forEach(c=>{
-      let val=c.v(r)||"—";
-      // GAP 欄位特殊處理顏色
+      let val=c.v(r);
+      if(!val)val="—";
+      // GAP 欄位：直接返回帶顏色的 HTML
       if(c.h==="GAP"){
-        const g=parseInt(val);
-        if(!isNaN(g)){val=g<0?'<span style="color:var(--red)">'+g+'天</span>':'<span style="color:var(--green)">+'+g+'天</span>'}
+        const g=parseInt(gsVal(r,"Auto GAP"));
+        if(isNaN(g))val="—";
+        else val=g<0?'<span style="color:var(--red)">'+g+'天</span>':'<span style="color:var(--green)">+'+g+'天</span>';
       }
-      // 進度欄位加顏色
-      if(c.h.includes("%")){
+      // 進度欄位：加顏色
+      else if(c.h.includes("%")){
         const pct=parseInt(val);
         if(!isNaN(pct)){
           const color=pct>=80?"var(--green)":pct>=50?"var(--blue)":pct>0?"var(--amber)":"var(--red)";
-          val='<span style="color:'+color+'">'+val+'</span>';
-        }
+          val='<span style="color:'+color+'">'+esc(val)+'</span>';
+        }else{val=esc(val)}
       }
-      h+='<td>'+(c.h==="Spec"?'<b>'+esc(val)+'</b>':esc(val))+'</td>';
+      // Spec 欄位：加粗
+      else if(c.h==="Spec"){
+        val='<b>'+esc(val)+'</b>';
+      }
+      // 其他欄位：正常轉義
+      else{
+        val=esc(val);
+      }
+      h+='<td>'+val+'</td>';
     });
     h+='</tr>';
   });
