@@ -251,6 +251,27 @@ html.dark .order-section.supplier-r{background:#2a2510;border-color:#5a4a10}
 .ms-total-progress{margin-top:8px;padding:8px 12px;background:#f0f6ff;border:1px solid #bcd4f5;border-radius:6px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700}
 html.dark .ms-total-progress{background:#1a2c50;border-color:#274a8a}
 html.dark .ms-progress input{background:#101a30;border-color:#33436b;color:var(--text)}
+.cft-pipeline{display:flex;gap:4px;align-items:stretch;overflow-x:auto;padding:8px 0}
+.cft-stage{flex:1;min-width:80px;text-align:center;padding:10px 6px;border-radius:8px;background:#f8fafc;border:2px solid #e2e8f0;position:relative}
+.cft-stage .cft-name{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px}
+.cft-stage .cft-count{font-size:24px;font-weight:800;color:var(--blue)}
+.cft-stage .cft-arrow{position:absolute;right:-10px;top:50%;transform:translateY(-50%);font-size:16px;color:#cbd5e1;z-index:1}
+.cft-stage.active{border-color:var(--blue);background:#eff6ff}
+.cft-stage.warn{border-color:var(--red);background:#fef2f2}
+.cft-stage .cft-count{color:var(--blue)}
+.cft-stage.warn .cft-count{color:var(--red)}
+html.dark .cft-stage{background:#1a2540;border-color:#33436b}
+html.dark .cft-stage.active{background:#1a2c50;border-color:#3b82f6}
+html.dark .cft-stage.warn{background:#3b1515;border-color:#ef4444}
+.sup-status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.sup-status-card{background:var(--card);border:1px solid #e2e8f0;border-radius:10px;padding:12px;border-left:4px solid var(--blue)}
+.sup-status-card.high{border-left-color:var(--green)}
+.sup-status-card.mid{border-left-color:var(--amber)}
+.sup-status-card.low{border-left-color:var(--red)}
+.sup-status-card .sup-name{font-size:14px;font-weight:700;margin-bottom:6px}
+.sup-status-card .sup-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px}
+.sup-status-card .sup-stats b{font-size:14px}
+html.dark .sup-status-card{border-color:#33436b}
 .gs-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
 .gs-card{background:var(--card);border:1px solid #e2e8f0;border-radius:10px;padding:14px;text-align:center}
 .gs-card .gs-num{font-size:28px;font-weight:800;color:var(--blue)}
@@ -345,14 +366,17 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <section id="page-dashboard" class="page active">
 <div class="grid4" id="kpis"></div>
 <div id="dashRegion" style="margin-top:10px;margin-bottom:4px;font-size:12px;color:var(--muted)"></div>
-<div class="grid2">
+<div class="card" style="margin-top:12px"><h3>🔄 CFT 流程管線</h3><div id="dashCFT"></div></div>
+<div class="card" style="margin-top:12px"><h3> 供應商即時狀態（Google Sheet）</h3><div id="dashSupStatus"></div></div>
+<div class="grid2" style="margin-top:12px">
 <div class="card"><h3 data-i18n="dashOrders">📋 進行中訂單</h3><div id="dashOrders"></div></div>
 <div>
-<div class="card" style="margin-bottom:16px"><h3 data-i18n="dashDue">📅 近期交期</h3><div id="dashDue"></div></div>
+<div class="card" style="margin-bottom:16px"><h3 data-i18n="dashDue"> 近期交期</h3><div id="dashDue"></div></div>
 <div class="card"><h3 data-i18n="dashAlerts">️ 逾期提醒</h3><div id="dashAlerts"></div></div>
 </div>
 </div>
-<div class="card" style="margin-top:16px"><h3> Google Sheet 資料品質檢查</h3><div id="dashGSIssues"></div></div>
+<div class="card" style="margin-top:16px"><h3>🔍 Google Sheet 資料品質檢查</h3><div id="dashGSIssues"></div></div>
+<div class="card" style="margin-top:12px"><h3> GAP 警示排行（延遲最嚴重）</h3><div id="dashGapRank"></div></div>
 </section>
 
 <section id="page-suppliers" class="page"><div class="card">
@@ -661,6 +685,9 @@ function renderDashboard(){
     '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'+fmt(t("alertSum"),{o:alGroups.length,m:al.length})+'</div>'+
     alGroups.map(g=>'<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>'+esc(g.o.id)+'</b> '+statusBadge("overdue")+(role==="admin"?' <button class="btn btn-secondary btn-sm" onclick="chaseOrder(\''+esc(g.o.id)+'\')">'+t("chase")+'</button>':'')+'<br>'+g.items.map(x=>'<span style="font-size:12px;color:var(--muted)">'+esc(x.m.name||"")+' '+fmt(t("overDays"),{d:x.days})+'</span> '+msBadge(x.m)+(x.m.notes?'<br><span style="font-size:11px;color:var(--amber);margin-left:4px">💬 '+esc(x.m.notes)+'</span>':'')).join('<br>')+'</div>').join(""):'<div class="empty">'+t("noAlerts")+'</div>');
   renderDashGSAlerts();
+  renderDashCFT();
+  renderDashSupStatus();
+  renderDashGapRank();
 }
 function sortTH(label,table,key){const st=table==="order"?orderSort:supplierSort;const arrow=st&&st.key===key?(st.dir>0?" ▲":" ▼"):"";return'<th class="sortable" onclick="sortBy(\''+table+'\',\''+key+'\')">'+label+arrow+'</th>'}
 function sortBy(table,key){const st=table==="order"?orderSort:supplierSort;if(st&&st.key===key){st.dir*=-1}else{const ns={key,dir:1};if(table==="order")orderSort=ns;else supplierSort=ns}if(table==="order")renderOrders();else renderSuppliers()}
@@ -1569,6 +1596,79 @@ function renderSupplierPerf(){
   });
   h+='</tbody></table></div>';
   document.getElementById("supPerfView").innerHTML=h;
+}
+
+/* ==================== 儀表板 CFT 流程管線 ==================== */
+function renderDashCFT(){
+  if(!gsData.length){document.getElementById("dashCFT").innerHTML='<div class="empty">等待 Google Sheet 資料載入...</div>';return}
+  const stages=[
+    {name:"OPM",check:r=>gsVal(r,"MPM Customer KO Date")},
+    {name:"RD",check:r=>gsVal(r,"Supplier Drawing disassembly %")!==""},
+    {name:"Sourcing",check:r=>gsVal(r,"Supplier RM purchase Start -End Date")!==""},
+    {name:"Quotation",check:r=>gsVal(r,"Supplier STD part purchase Start -End Date")!==""},
+    {name:"Supplier",check:r=>gsPct(r,"Supplier Machining %")>0},
+    {name:"QA",check:r=>gsPct(r,"Supplier OQC %")>0},
+    {name:"Logistics",check:r=>gsVal(r,"Supplier Estimated ETD date")!==""},
+    {name:"Buyer",check:r=>gsVal(r,"Buyer GRN Date")!==""}
+  ];
+  const counts=stages.map(s=>gsData.filter(s.check).length);
+  const total=gsData.length;
+  let h='<div class="cft-pipeline">';
+  stages.forEach((s,i)=>{
+    const pct=total>0?Math.round(counts[i]/total*100):0;
+    const cls=pct<30?"warn":pct>70?"active":"";
+    h+='<div class="cft-stage '+cls+'">';
+    if(i<stages.length-1)h+='<span class="cft-arrow">→</span>';
+    h+='<div class="cft-name">'+s.name+'</div><div class="cft-count">'+counts[i]+'</div><div style="font-size:10px;color:var(--muted)">'+pct+'%</div></div>';
+  });
+  h+='</div>';
+  document.getElementById("dashCFT").innerHTML=h;
+}
+
+/* ==================== 儀表板供應商即時狀態 ==================== */
+function renderDashSupStatus(){
+  if(!gsData.length){document.getElementById("dashSupStatus").innerHTML='<div class="empty">等待 Google Sheet 資料載入...</div>';return}
+  const supMap=new Map();
+  gsData.forEach(r=>{
+    const sup=gsVal(r,"MPM Supplier");
+    if(!sup||sup==="#N/A")return;
+    if(!supMap.has(sup))supMap.set(sup,{name:sup,active:0,delayed:0,done:0,totalGap:0,gapCount:0});
+    const s=supMap.get(sup);
+    s.active++;
+    const gap=parseInt(gsVal(r,"Auto GAP"));
+    if(!isNaN(gap)&&Math.abs(gap)<=365){s.totalGap+=gap;s.gapCount++;if(gap<-3)s.delayed++}
+    if(gsVal(r,"Buyer GRN Date"))s.done++;
+  });
+  const sups=[...supMap.values()].sort((a,b)=>b.active-a.active);
+  let h='<div class="sup-status-grid">';
+  sups.slice(0,8).forEach(s=>{
+    const avgGap=s.gapCount>0?Math.round(s.totalGap/s.gapCount*10)/10:0;
+    const cls=avgGap<-3?"low":avgGap<0?"mid":"high";
+    h+='<div class="sup-status-card '+cls+'">'+
+      '<div class="sup-name">'+esc(s.name)+'</div>'+
+      '<div class="sup-stats">'+
+      '<div><span style="color:var(--muted)">進行中</span><br><b>'+s.active+'</b></div>'+
+      '<div><span style="color:var(--muted)">嚴重延遲</span><br><b style="color:'+(s.delayed>0?"var(--red)":"var(--green)")+'">'+s.delayed+'</b></div>'+
+      '<div><span style="color:var(--muted)">已完成</span><br><b style="color:var(--green)">'+s.done+'</b></div>'+
+      '<div><span style="color:var(--muted)">平均 GAP</span><br><b style="color:'+(avgGap<0?"var(--red)":"var(--green)")+'">'+avgGap+'天</b></div>'+
+      '</div></div>';
+  });
+  h+='</div>';
+  document.getElementById("dashSupStatus").innerHTML=h;
+}
+
+/* ==================== 儀表板 GAP 警示排行 ==================== */
+function renderDashGapRank(){
+  if(!gsData.length){document.getElementById("dashGapRank").innerHTML='<div class="empty">等待 Google Sheet 資料載入...</div>';return}
+  const delayed=gsData.map((r,i)=>({spec:gsVal(r,"MPM/OPM Spec"),project:gsVal(r,"MPM Project"),supplier:gsVal(r,"MPM Supplier"),gap:parseInt(gsVal(r,"Auto GAP")),eta:gsVal(r,"MPM ETA Target"),row:i+1})).filter(x=>!isNaN(x.gap)&&x.gap<0).sort((a,b)=>a.gap-b.gap);
+  if(!delayed.length){document.getElementById("dashGapRank").innerHTML='<div style="color:var(--green);padding:8px">✅ 無延遲訂單</div>';return}
+  let h='<div class="gs-wrap"><table class="gs-table"><thead><tr><th>#</th><th>Spec</th><th>Project</th><th>Supplier</th><th>ETA Target</th><th>GAP</th></tr></thead><tbody>';
+  delayed.slice(0,15).forEach((x,i)=>{
+    h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(x.spec||"—")+'</b></td><td>'+esc(x.project)+'</td><td>'+esc(x.supplier)+'</td><td>'+esc(x.eta)+'</td><td style="color:var(--red);font-weight:700">'+x.gap+'天</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  if(delayed.length>15)h+='<div style="font-size:12px;color:var(--muted);margin-top:6px">...還有 '+(delayed.length-15)+' 筆延遲訂單，請至 Google Sheet 頁面查看完整列表</div>';
+  document.getElementById("dashGapRank").innerHTML=h;
 }
 
 /* ==================== 儀表板 Google Sheet 數據品質檢查 ==================== */
