@@ -349,9 +349,10 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <div class="card"><h3 data-i18n="dashOrders">📋 進行中訂單</h3><div id="dashOrders"></div></div>
 <div>
 <div class="card" style="margin-bottom:16px"><h3 data-i18n="dashDue">📅 近期交期</h3><div id="dashDue"></div></div>
-<div class="card"><h3 data-i18n="dashAlerts">⚠️ 逾期提醒</h3><div id="dashAlerts"></div></div>
+<div class="card"><h3 data-i18n="dashAlerts">️ 逾期提醒</h3><div id="dashAlerts"></div></div>
 </div>
 </div>
+<div class="card" style="margin-top:16px"><h3> Google Sheet 資料品質檢查</h3><div id="dashGSIssues"></div></div>
 </section>
 
 <section id="page-suppliers" class="page"><div class="card">
@@ -375,7 +376,10 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <section id="page-search" class="page"><div class="card"><h3 data-i18n="navSearchH">🔍 進階搜尋</h3><div class="toolbar"><input type="search" id="globalSearch" data-i18n-ph="globalPh" placeholder="輸入關鍵字..." oninput="renderSearch()"></div><div id="searchResults"></div></div></section>
 <section id="page-gantt" class="page"><div class="card"><h3>📅 Timeline / Gantt</h3><div id="ganttView"></div></div></section>
 <section id="page-calendar" class="page"><div class="card"><h3>🗓️ 行事曆</h3><div id="calNav" class="cal-nav"></div><div id="calView"></div><div id="calLegend" class="cal-legend"></div></div></section>
-<section id="page-performance" class="page"><div class="card"><h3 data-i18n="perfH">📈 供應商績效分析</h3><div id="perfView"></div></div></section>
+<section id="page-performance" class="page"><div class="card"><h3 data-i18n="perfH">📈 供應商績效分析</h3>
+<div id="supPerfView"></div>
+<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:16px"><h4>📊 系統內部供應商績效（訂單系統）</h4><div id="perfView"></div></div>
+</div></section>
 <section id="page-notifications" class="page"><div class="card"><h3 data-i18n="notifH">🔔 通知中心</h3><div id="notifView"></div></div></section>
 <section id="page-gsheet" class="page"><div class="card"><h3>📊 Google Sheet — Working Table</h3>
 <div id="gsRefresh" class="gs-refresh"></div>
@@ -611,6 +615,8 @@ function go(p){
   document.getElementById("pageTitle").textContent=titles[p]||t("titleDashboard");
   renderAll();
   if(p==="gsheet"&&!gsData.length)fetchGSheet();
+  if(p==="performance"&&!arData.length){fetchARSheet().then(()=>{renderSupplierPerf();renderPerf()})}
+  if(p==="dashboard"&&!gsData.length)fetchGSheet();
 }
 
 /* ==================== 渲染 ==================== */
@@ -654,6 +660,7 @@ function renderDashboard(){
   document.getElementById("dashAlerts").innerHTML=(burstHtml?'<div style="margin-bottom:8px">'+burstHtml+'</div>':'')+(alGroups.length?
     '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'+fmt(t("alertSum"),{o:alGroups.length,m:al.length})+'</div>'+
     alGroups.map(g=>'<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>'+esc(g.o.id)+'</b> '+statusBadge("overdue")+(role==="admin"?' <button class="btn btn-secondary btn-sm" onclick="chaseOrder(\''+esc(g.o.id)+'\')">'+t("chase")+'</button>':'')+'<br>'+g.items.map(x=>'<span style="font-size:12px;color:var(--muted)">'+esc(x.m.name||"")+' '+fmt(t("overDays"),{d:x.days})+'</span> '+msBadge(x.m)+(x.m.notes?'<br><span style="font-size:11px;color:var(--amber);margin-left:4px">💬 '+esc(x.m.notes)+'</span>':'')).join('<br>')+'</div>').join(""):'<div class="empty">'+t("noAlerts")+'</div>');
+  renderDashGSAlerts();
 }
 function sortTH(label,table,key){const st=table==="order"?orderSort:supplierSort;const arrow=st&&st.key===key?(st.dir>0?" ▲":" ▼"):"";return'<th class="sortable" onclick="sortBy(\''+table+'\',\''+key+'\')">'+label+arrow+'</th>'}
 function sortBy(table,key){const st=table==="order"?orderSort:supplierSort;if(st&&st.key===key){st.dir*=-1}else{const ns={key,dir:1};if(table==="order")orderSort=ns;else supplierSort=ns}if(table==="order")renderOrders();else renderSuppliers()}
@@ -1341,6 +1348,7 @@ function toggleNeedHelp(id){
 /* ==================== Google Sheet 整合 ==================== */
 const GS_ID="1cXbjgqATxhSr-bBoXCcPW4f23s391kj7QgMCc7Co9P0";
 const GS_SHEET="Working+Table";
+const GS_AR_SHEET="Already+Received";
 let gsData=[],gsCols=[],gsSortCol=-1,gsSortAsc=true;
 let gsFilterProject="",gsFilterSupplier="",gsFilterPhase="",gsFilterStatus="",gsSearch="";
 
@@ -1484,6 +1492,114 @@ function renderGSheetTable(){
 function gsSort(colIdx){
   if(gsSortCol===colIdx){gsSortAsc=!gsSortAsc}else{gsSortCol=colIdx;gsSortAsc=true}
   renderGSheetTable();
+}
+
+/* ==================== Already Received 供應商績效分析 ==================== */
+let arData=[],arCols=[];
+
+function fetchARSheet(){
+  const url="https://docs.google.com/spreadsheets/d/"+GS_ID+"/gviz/tq?tqx=out:csv&sheet="+GS_AR_SHEET;
+  return fetch(url).then(r=>r.text()).then(csv=>{
+    const rows=parseCSV(csv);
+    if(rows.length<2)return[];
+    arCols=rows[0];
+    arData=rows.slice(1).filter(r=>r.some(c=>c&&c.trim()));
+    return arData;
+  });
+}
+
+function arVal(r,name){
+  const nn=name.replace(/[\n\r]/g,' ').replace(/\s+/g,' ').trim();
+  const idx=arCols.findIndex(c=>{const cn=c.replace(/[\n\r]/g,' ').replace(/\s+/g,' ').trim();return cn===nn||cn.endsWith(' '+nn)||cn.endsWith(nn)});
+  return idx>=0?(r[idx]||"").trim():"";
+}
+function arPct(r,name){const v=arVal(r,name);if(!v)return-1;const m=v.match(/(\d+)/);return m?parseInt(m[1]):-1}
+function arGap(r){const v=arVal(r,"Auto GAP");const n=parseInt(v);return isNaN(n)?null:n}
+
+function calcSupplierPerformance(){
+  const supMap=new Map();
+  arData.forEach(r=>{
+    const sup=arVal(r,"Supplier");
+    if(!sup||sup==="#N/A")return;
+    if(!supMap.has(sup))supMap.set(sup,{name:sup,total:0,onTime:0,late:0,totalGap:0,gapCount:0,orders:[],avgLT:0,ltCount:0});
+    const s=supMap.get(sup);
+    s.total++;
+    s.orders.push({spec:arVal(r,"Spec"),project:arVal(r,"Project"),phase:arVal(r,"階段\nProject Phase")});
+    const gap=arGap(r);
+    if(gap!==null){s.totalGap+=gap;s.gapCount++;if(gap<=0)s.onTime++;else s.late++}
+    const lt=parseInt(arVal(r,"Supplier LT"));
+    if(!isNaN(lt)&&lt>0){s.avgLT+=lt;s.ltCount++}
+  });
+  const result=[];
+  supMap.forEach(s=>{
+    s.avgGap=s.gapCount>0?Math.round(s.totalGap/s.gapCount*10)/10:0;
+    s.avgLT=s.ltCount>0?Math.round(s.avgLT/s.ltCount*10)/10:0;
+    s.onTimeRate=s.gapCount>0?Math.round(s.onTime/s.gapCount*100):0;
+    result.push(s);
+  });
+  result.sort((a,b)=>b.onTimeRate-a.onTimeRate);
+  return result;
+}
+
+function renderSupplierPerf(){
+  const perfs=calcSupplierPerformance();
+  if(!perfs.length){document.getElementById("supPerfView").innerHTML='<div class="empty">無資料</div>';return}
+  let h='<div class="gs-cards">';
+  perfs.forEach(p=>{
+    const rateColor=p.onTimeRate>=80?"var(--green)":p.onTimeRate>=50?"var(--amber)":"var(--red)";
+    h+='<div class="gs-card" style="border-left:4px solid '+rateColor+'">'+
+      '<div style="font-size:16px;font-weight:700;margin-bottom:8px">'+esc(p.name)+'</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">'+
+      '<div><span style="color:var(--muted)">訂單數</span><br><b>'+p.total+'</b></div>'+
+      '<div><span style="color:var(--muted)">準時率</span><br><b style="color:'+rateColor+'">'+p.onTimeRate+'%</b></div>'+
+      '<div><span style="color:var(--muted)">平均 GAP</span><br><b style="color:'+(p.avgGap<0?"var(--red)":"var(--green)")+'">'+p.avgGap+'天</b></div>'+
+      '<div><span style="color:var(--muted)">平均 LT</span><br><b>'+p.avgLT+'天</b></div>'+
+      '</div></div>';
+  });
+  h+='</div>';
+  // Detail table
+  h+='<div class="gs-wrap" style="margin-top:16px"><table class="gs-table"><thead><tr><th>Supplier</th><th>Orders</th><th>On Time</th><th>Late</th><th>On-Time Rate</th><th>Avg GAP</th><th>Avg LT</th><th>Projects</th></tr></thead><tbody>';
+  perfs.forEach(p=>{
+    const rateColor=p.onTimeRate>=80?"green":p.onTimeRate>=50?"amber":"red";
+    const projects=[...new Set(p.orders.map(o=>o.project))].filter(Boolean).join(", ");
+    h+='<tr><td><b>'+esc(p.name)+'</b></td><td>'+p.total+'</td><td style="color:var(--green)">'+p.onTime+'</td><td style="color:var(--red)">'+p.late+'</td>'+
+      '<td><span class="gs-tag '+rateColor+'">'+p.onTimeRate+'%</span></td>'+
+      '<td style="color:'+(p.avgGap<0?"var(--red)":"var(--green)")+';font-weight:700">'+p.avgGap+'天</td>'+
+      '<td>'+p.avgLT+'天</td><td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">'+esc(projects)+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  document.getElementById("supPerfView").innerHTML=h;
+}
+
+/* ==================== 儀表板 Google Sheet 數據品質檢查 ==================== */
+function renderDashGSAlerts(){
+  if(!gsData.length)return;
+  const issues=[];
+  gsData.forEach((r,i)=>{
+    const spec=gsVal(r,"MPM/OPM Spec");
+    const ko=gsVal(r,"MPM Customer KO Date");
+    const sup=gsVal(r,"MPM Supplier");
+    const phase=gsVal(r,"MPM 階段\nProject Phase");
+    const level=gsVal(r,"Auto Fixture Level");
+    if(!ko)issues.push({type:"missing",msg:"缺少 KO Date",spec,row:i+1});
+    if(!sup||sup==="#N/A")issues.push({type:"missing",msg:"缺少 Supplier",spec,row:i+1});
+    if(!phase)issues.push({type:"missing",msg:"缺少 Phase",spec,row:i+1});
+    if(!level)issues.push({type:"missing",msg:"缺少 Level",spec,row:i+1});
+    const gap=parseInt(gsVal(r,"Auto GAP"));
+    if(!isNaN(gap)&&gap<-7)issues.push({type:"delayed",msg:"GAP = "+gap+" 天 (嚴重延遲)",spec,row:i+1});
+    const oqc=gsPct(r,"Supplier OQC %");
+    if(oqc>=0&&oqc<100){
+      const asm=gsPct(r,"Supplier Assembling %");
+      if(asm===100&&oqc<50)issues.push({type:"stuck",msg:"組裝完成但 OQC 進度低 ("+oqc+"%)",spec,row:i+1});
+    }
+  });
+  if(!issues.length){document.getElementById("dashGSIssues").innerHTML='<div style="color:var(--green);padding:8px">✅ Google Sheet 資料品質良好</div>';return}
+  let h='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">發現 '+issues.length+' 項資料問題：</div>';
+  const byType={missing:issues.filter(x=>x.type==="missing"),delayed:issues.filter(x=>x.type==="delayed"),stuck:issues.filter(x=>x.type==="stuck")};
+  if(byType.missing.length)h+='<div style="margin-bottom:8px"><span class="gs-tag amber">⚠️ 欄位缺失 '+byType.missing.length+'</span><div style="margin-top:4px">'+byType.missing.slice(0,5).map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+(byType.missing.length>5?'<div style="font-size:11px;color:var(--muted)">...還有 '+(byType.missing.length-5)+' 項</div>':"")+'</div></div>';
+  if(byType.delayed.length)h+='<div style="margin-bottom:8px"><span class="gs-tag red">🔴 嚴重延遲 '+byType.delayed.length+'</span><div style="margin-top:4px">'+byType.delayed.slice(0,5).map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
+  if(byType.stuck.length)h+='<div style="margin-bottom:8px"><span class="gs-tag amber">🟡 流程卡關 '+byType.stuck.length+'</span><div style="margin-top:4px">'+byType.stuck.slice(0,5).map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
+  document.getElementById("dashGSIssues").innerHTML=h;
 }
 
 /* ==================== 初始化 ==================== */
