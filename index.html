@@ -371,8 +371,8 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <div class="card" style="margin-top:12px"><h3>🔄 CFT 流程管線 <span style="font-size:12px;color:var(--muted);font-weight:normal">（點擊查看訂單明細）</span></h3><div id="dashCFT"></div></div>
 <div class="card" style="margin-top:12px"><h3>📊 供應商即時狀態</h3><div id="dashSupStatus"></div></div>
 <div class="grid2" style="margin-top:12px">
-<div class="card"><h3>⏰ 訂單年齡分析</h3><div id="dashAging"></div></div>
-<div class="card"><h3>📅 近期交期（7天內）</h3><div id="dashDueSoon"></div></div>
+<div class="card"><h3>📦 供應商訂單分佈</h3><div id="dashSupDist"></div></div>
+<div class="card"><h3>📅 近期交期 <button class="btn btn-secondary btn-sm" onclick="toggleDueDays()" style="float:right;padding:2px 8px;font-size:11px" id="dueDaysBtn">7天</button></h3><div id="dashDueSoon"></div></div>
 </div>
 <div class="card" style="margin-top:12px"><h3>🔴 GAP 警示排行（延遲最嚴重）</h3><div id="dashGapRank"></div></div>
 <div class="card" style="margin-top:12px"><h3>🔍 資料品質檢查</h3><div id="dashGSIssues"></div></div>
@@ -681,7 +681,7 @@ function renderDashboard(){
   document.getElementById("dashRegion").innerHTML=regionHtml?'<span style="margin-right:6px">地區分佈：</span>'+regionHtml:'';
   renderDashCFT();
   renderDashSupStatus();
-  renderDashAging();
+  renderDashSupDist();
   renderDashDueSoon();
   renderDashGapRank();
   renderDashGSAlerts();
@@ -1596,10 +1596,11 @@ function renderSupplierPerf(){
   document.getElementById("supPerfView").innerHTML=h;
 }
 
-/* ==================== 儀表板 CFT 流程管線 ==================== */
+/* ==================== 儀表板 CFT 流程管線（互斥階段） ==================== */
 let cftStages=[];
 function renderDashCFT(){
   if(!gsData.length){document.getElementById("dashCFT").innerHTML='<div class="empty">等待 Google Sheet 資料載入...</div>';return}
+  // 定義階段檢查函數（從 OPM → Buyer 順序）
   cftStages=[
     {name:"OPM",check:r=>gsVal(r,"MPM Customer KO Date")!==""},
     {name:"RD",check:r=>gsVal(r,"Supplier Drawing disassembly %")!==""},
@@ -1610,43 +1611,53 @@ function renderDashCFT(){
     {name:"Logistics",check:r=>gsVal(r,"Supplier Estimated ETD date")!==""},
     {name:"Buyer",check:r=>gsVal(r,"Buyer GRN Date")!==""}
   ];
-  const total=gsData.length;
-  // "在此階段" = 已進入此階段但尚未進入下一階段
-  const inStage=cftStages.map((s,i)=>{
-    const next=i<cftStages.length-1?cftStages[i+1].check:null;
-    return gsData.filter(r=>s.check(r)&&(!next||!next(r)));
+  // 每筆訂單只算在「第一關沒有資料的階段」= 卡關點
+  const stageCounts=cftStages.map(()=>0);
+  const stageOrders=cftStages.map(()=>[]);
+  gsData.forEach((r,idx)=>{
+    for(let i=0;i<cftStages.length;i++){
+      if(!cftStages[i].check(r)){
+        // 找到第一個沒有資料的階段 = 卡關點
+        stageCounts[i]++;
+        stageOrders[i].push(idx);
+        return;
+      }
+    }
+    // 所有階段都有資料 = 已完成
   });
-  // "已進入" = 已進入此階段（包含已通過的）
-  const entered=cftStages.map(s=>gsData.filter(s.check).length);
+  const total=gsData.length;
+  const completed=total-stageCounts.reduce((a,b)=>a+b,0);
   let h='<div class="cft-pipeline">';
   cftStages.forEach((s,i)=>{
-    const cnt=inStage[i].length;
-    const pct=total>0?Math.round(entered[i]/total*100):0;
+    const cnt=stageCounts[i];
+    const pct=total>0?Math.round(cnt/total*100):0;
     const cls=cnt>0?"active":"";
     h+='<div class="cft-stage '+cls+'" onclick="showCFTDetail('+i+')" style="cursor:pointer" title="點擊查看訂單">';
     if(i<cftStages.length-1)h+='<span class="cft-arrow">→</span>';
     h+='<div class="cft-name">'+s.name+'</div><div class="cft-count">'+cnt+'</div>';
-    h+='<div style="font-size:10px;color:var(--muted)">進行中</div>';
-    h+='<div style="font-size:9px;color:var(--muted);margin-top:2px">累計 '+entered[i]+'/'+total+'</div>';
+    h+='<div style="font-size:10px;color:var(--muted)">'+pct+'%</div>';
     h+='</div>';
   });
-  h+='</div><div id="cftDetail" style="margin-top:8px"></div>';
+  h+='</div>';
+  if(completed>0)h+='<div style="font-size:12px;color:var(--green);margin-top:6px">✅ 已完成全部階段：'+completed+' 筆</div>';
+  h+='<div id="cftDetail" style="margin-top:8px"></div>';
   document.getElementById("dashCFT").innerHTML=h;
+  window.cftStageOrders=stageOrders;
 }
 function showCFTDetail(idx){
   const s=cftStages[idx];
-  const next=idx<cftStages.length-1?cftStages[idx+1].check:null;
-  const orders=gsData.filter(r=>s.check(r)&&(!next||!next(r)));
+  const orderIdxs=window.cftStageOrders[idx]||[];
   const el=document.getElementById("cftDetail");
-  if(!orders.length){el.innerHTML='<div class="empty">此階段無進行中訂單</div>';return}
+  if(!orderIdxs.length){el.innerHTML='<div class="empty">此階段無卡關訂單</div>';return}
   let h='<table class="gs-table" style="font-size:12px"><thead><tr><th>Spec</th><th>Project</th><th>Supplier</th><th>ETA Target</th><th>GAP</th></tr></thead><tbody>';
-  orders.forEach(r=>{
+  orderIdxs.forEach(i=>{
+    const r=gsData[i];
     const gap=parseInt(gsVal(r,"Auto GAP"));
     const gapStr=isNaN(gap)?"—":(gap<0?'<span style="color:var(--red)">'+gap+'天</span>':'<span style="color:var(--green)">+'+gap+'天</span>');
     h+='<tr><td><b>'+esc(gsVal(r,"MPM/OPM Spec")||"—")+'</b></td><td>'+esc(gsVal(r,"MPM Project"))+'</td><td>'+esc(gsVal(r,"MPM Supplier"))+'</td><td>'+esc(gsVal(r,"MPM ETA Target"))+'</td><td>'+gapStr+'</td></tr>';
   });
   h+='</tbody></table>';
-  el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:4px">📌 <b>'+s.name+'</b> 階段進行中訂單（'+orders.length+' 筆）</div>'+h;
+  el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:4px">📌 卡在 <b>'+s.name+'</b> 階段的訂單（'+orderIdxs.length+' 筆）</div>'+h;
 }
 
 /* ==================== 儀表板供應商即時狀態 ==================== */
@@ -1681,38 +1692,40 @@ function renderDashSupStatus(){
   document.getElementById("dashSupStatus").innerHTML=h;
 }
 
-/* ==================== 儀表板訂單年齡分析 ==================== */
-function renderDashAging(){
-  if(!gsData.length){document.getElementById("dashAging").innerHTML='<div class="empty">等待資料...</div>';return}
-  const now=new Date();
-  const buckets={"0-7天":0,"8-14天":0,"15-30天":0,"31-60天":0,"60天以上":0};
+/* ==================== 儀表板供應商訂單分佈 ==================== */
+function renderDashSupDist(){
+  if(!gsData.length){document.getElementById("dashSupDist").innerHTML='<div class="empty">等待資料...</div>';return}
+  const supMap=new Map();
   gsData.forEach(r=>{
-    const ko=gsVal(r,"MPM Customer KO Date");
-    if(!ko)return;
-    const koDate=parseDate(ko);
-    if(!koDate)return;
-    const age=Math.floor((now-koDate)/(1000*60*60*24));
-    if(age<0)return;
-    if(age<=7)buckets["0-7天"]++;
-    else if(age<=14)buckets["8-14天"]++;
-    else if(age<=30)buckets["15-30天"]++;
-    else if(age<=60)buckets["31-60天"]++;
-    else buckets["60天以上"]++;
+    const sup=gsVal(r,"MPM Supplier");
+    if(!sup||sup==="#N/A")return;
+    if(!supMap.has(sup))supMap.set(sup,0);
+    supMap.set(sup,supMap.get(sup)+1);
   });
-  const total=Object.values(buckets).reduce((a,b)=>a+b,0);
-  let h='<div style="display:flex;gap:8px;flex-wrap:wrap">';
-  Object.entries(buckets).forEach(([label,count])=>{
-    const pct=total>0?Math.round(count/total*100):0;
-    const color=count>total*0.3?"var(--red)":count>total*0.15?"var(--amber)":"var(--green)";
-    h+='<div style="flex:1;min-width:100px;text-align:center;padding:10px;background:var(--card);border:1px solid var(--line);border-radius:8px;border-top:3px solid '+color+'">';
-    h+='<div style="font-size:20px;font-weight:800;color:'+color+'">'+count+'</div>';
-    h+='<div style="font-size:11px;color:var(--muted)">'+label+' ('+pct+'%)</div></div>';
+  const sups=[...supMap.entries()].sort((a,b)=>b[1]-a[1]);
+  const maxCount=sups.length?sups[0][1]:1;
+  let h='<div style="display:flex;flex-direction:column;gap:8px">';
+  sups.forEach(([name,count])=>{
+    const pct=Math.round(count/maxCount*100);
+    h+='<div style="display:flex;align-items:center;gap:8px">';
+    h+='<div style="min-width:100px;font-size:12px;font-weight:600">'+esc(name)+'</div>';
+    h+='<div style="flex:1;background:#f0f0f0;border-radius:4px;height:20px;position:relative">';
+    h+='<div style="width:'+pct+'%;background:var(--blue);height:100%;border-radius:4px;transition:width 0.3s"></div>';
+    h+='</div>';
+    h+='<div style="min-width:40px;text-align:right;font-size:12px;font-weight:700">'+count+'</div>';
+    h+='</div>';
   });
   h+='</div>';
-  document.getElementById("dashAging").innerHTML=h;
+  document.getElementById("dashSupDist").innerHTML=h;
 }
 
-/* ==================== 儀表板近期交期（7天內） ==================== */
+/* ==================== 儀表板近期交期（可切換 7/14 天） ==================== */
+let dueDays=7;
+function toggleDueDays(){
+  dueDays=dueDays===7?14:7;
+  document.getElementById("dueDaysBtn").textContent=dueDays+"天";
+  renderDashDueSoon();
+}
 function renderDashDueSoon(){
   if(!gsData.length){document.getElementById("dashDueSoon").innerHTML='<div class="empty">等待資料...</div>';return}
   const now=new Date();now.setHours(0,0,0,0);
@@ -1723,12 +1736,12 @@ function renderDashDueSoon(){
     const etaDate=parseDate(eta);
     if(!etaDate)return;
     const days=Math.floor((etaDate-now)/(1000*60*60*24));
-    if(days>=0&&days<=7){
+    if(days>=0&&days<=dueDays){
       soon.push({spec:gsVal(r,"MPM/OPM Spec"),project:gsVal(r,"MPM Project"),supplier:gsVal(r,"MPM Supplier"),eta:eta,days:days,row:i+1});
     }
   });
   soon.sort((a,b)=>a.days-b.days);
-  if(!soon.length){document.getElementById("dashDueSoon").innerHTML='<div class="empty">7天內無交期</div>';return}
+  if(!soon.length){document.getElementById("dashDueSoon").innerHTML='<div class="empty">'+dueDays+'天內無交期</div>';return}
   let h='<div style="font-size:12px;color:var(--muted);margin-bottom:6px">共 '+soon.length+' 筆訂單即將到期</div>';
   h+='<div style="max-height:200px;overflow-y:auto">';
   soon.forEach(x=>{
