@@ -251,6 +251,33 @@ html.dark .order-section.supplier-r{background:#2a2510;border-color:#5a4a10}
 .ms-total-progress{margin-top:8px;padding:8px 12px;background:#f0f6ff;border:1px solid #bcd4f5;border-radius:6px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700}
 html.dark .ms-total-progress{background:#1a2c50;border-color:#274a8a}
 html.dark .ms-progress input{background:#101a30;border-color:#33436b;color:var(--text)}
+.gs-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+.gs-card{background:var(--card);border:1px solid #e2e8f0;border-radius:10px;padding:14px;text-align:center}
+.gs-card .gs-num{font-size:28px;font-weight:800;color:var(--blue)}
+.gs-card .gs-label{font-size:12px;color:var(--muted);margin-top:4px}
+.gs-card.warn .gs-num{color:var(--red)}
+.gs-card.ok .gs-num{color:var(--green)}
+.gs-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.gs-filters select,.gs-filters input{padding:7px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px}
+.gs-table{width:100%;border-collapse:collapse;font-size:12px}
+.gs-table th{background:#f1f5f9;padding:8px 6px;text-align:left;font-weight:700;position:sticky;top:0;z-index:1;white-space:nowrap;cursor:pointer;user-select:none}
+.gs-table td{padding:6px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+.gs-table tr:hover{background:#f8fafc}
+.gs-table .ms-bar{display:inline-block;width:40px;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;vertical-align:middle}
+.gs-table .ms-bar-fill{height:100%;border-radius:4px}
+.gs-tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600}
+.gs-tag.green{background:#dcfce7;color:#166534}
+.gs-tag.amber{background:#fef3c7;color:#92400e}
+.gs-tag.red{background:#fee2e2;color:#991b1b}
+.gs-tag.blue{background:#dbeafe;color:#1e40af}
+.gs-tag.gray{background:#f1f5f9;color:#64748b}
+.gs-wrap{max-height:70vh;overflow:auto;border:1px solid #e2e8f0;border-radius:8px}
+.gs-refresh{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;color:var(--muted)}
+html.dark .gs-table th{background:#1e293b}
+html.dark .gs-table tr:hover{background:#1a2540}
+html.dark .gs-table td{border-color:#253356}
+html.dark .gs-card{border-color:#33436b}
+html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;border-color:#33436b;color:var(--text)}
 </style>
 </head>
 <body>
@@ -291,6 +318,7 @@ html.dark .ms-progress input{background:#101a30;border-color:#33436b;color:var(-
 <button data-page="calendar" onclick="go('calendar')">🗓️ 行事曆</button>
 <button data-page="performance" onclick="go('performance')" data-i18n="navPerf">📈 績效分析</button>
 <button data-page="notifications" onclick="go('notifications')" data-i18n="navNotif">🔔 通知中心</button>
+<button data-page="gsheet" onclick="go('gsheet')">📊 Google Sheet</button>
 <div class="nav-sep"></div>
 <div class="nav-title" data-i18n="navSystem">系統</div>
 <button data-page="audit" data-admin onclick="go('audit')">🧾 Audit Log</button>
@@ -349,6 +377,12 @@ html.dark .ms-progress input{background:#101a30;border-color:#33436b;color:var(-
 <section id="page-calendar" class="page"><div class="card"><h3>🗓️ 行事曆</h3><div id="calNav" class="cal-nav"></div><div id="calView"></div><div id="calLegend" class="cal-legend"></div></div></section>
 <section id="page-performance" class="page"><div class="card"><h3 data-i18n="perfH">📈 供應商績效分析</h3><div id="perfView"></div></div></section>
 <section id="page-notifications" class="page"><div class="card"><h3 data-i18n="notifH">🔔 通知中心</h3><div id="notifView"></div></div></section>
+<section id="page-gsheet" class="page"><div class="card"><h3>📊 Google Sheet — Working Table</h3>
+<div id="gsRefresh" class="gs-refresh"></div>
+<div id="gsCards" class="gs-cards"></div>
+<div class="gs-filters" id="gsFilters"></div>
+<div class="gs-wrap"><table class="gs-table" id="gsTable"></table></div>
+</div></section>
 <section id="page-audit" class="page"><div class="card"><h3>🧾 Audit Log</h3><div id="auditView"></div></div></section>
 <section id="page-sync" class="page"><div class="card"><h3 data-i18n="settingsH">⚙️ 系統設定</h3>
 <div id="storageInfo" style="margin-bottom:14px"></div>
@@ -573,9 +607,10 @@ function go(p){
   document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
   const el=document.getElementById("page-"+p);if(el)el.classList.add("active");
   document.querySelectorAll(".nav button[data-page]").forEach(x=>x.classList.toggle("active",x.dataset.page===p));
-  const titles={dashboard:t("titleDashboard"),suppliers:t("navSuppliers"),mycompany:t("navMyCompany"),orders:t("navOrders"),alerts:t("navAlertsH"),search:t("navSearchH"),gantt:t("titleGantt"),calendar:t("titleCalendar"),performance:t("perfH"),notifications:t("notifH"),audit:t("titleAudit"),sync:t("settingsH")};
+  const titles={dashboard:t("titleDashboard"),suppliers:t("navSuppliers"),mycompany:t("navMyCompany"),orders:t("navOrders"),alerts:t("navAlertsH"),search:t("navSearchH"),gantt:t("titleGantt"),calendar:t("titleCalendar"),performance:t("perfH"),notifications:t("notifH"),gsheet:"📊 Google Sheet",audit:t("titleAudit"),sync:t("settingsH")};
   document.getElementById("pageTitle").textContent=titles[p]||t("titleDashboard");
   renderAll();
+  if(p==="gsheet"&&!gsData.length)fetchGSheet();
 }
 
 /* ==================== 渲染 ==================== */
@@ -1301,6 +1336,154 @@ function toggleNeedHelp(id){
   save();saveAudit(o.needHelp?"標記需要協助":"取消協助",id);
   if(o.needHelp)toast(t("helpNotify"),"info");
   renderAll();
+}
+
+/* ==================== Google Sheet 整合 ==================== */
+const GS_ID="1cXbjgqATxhSr-bBoXCcPW4f23s391kj7QgMCc7Co9P0";
+const GS_SHEET="Working+Table";
+let gsData=[],gsCols=[],gsSortCol=-1,gsSortAsc=true;
+let gsFilterProject="",gsFilterSupplier="",gsFilterPhase="",gsFilterStatus="",gsSearch="";
+
+function fetchGSheet(){
+  const url="https://docs.google.com/spreadsheets/d/"+GS_ID+"/gviz/tq?tqx=out:csv&sheet="+GS_SHEET;
+  document.getElementById("gsRefresh").innerHTML='⏳ 載入中...';
+  fetch(url).then(r=>r.text()).then(csv=>{
+    const rows=parseCSV(csv);
+    if(rows.length<2){document.getElementById("gsRefresh").textContent='❗ 無資料';return}
+    gsCols=rows[0];
+    gsData=rows.slice(1).filter(r=>r.some(c=>c.trim()));
+    document.getElementById("gsRefresh").innerHTML='✅ 最後更新：'+new Date().toLocaleTimeString()+' <button class="btn btn-secondary btn-sm" onclick="fetchGSheet()" style="margin-left:8px;padding:3px 10px">🔄 重新整理</button>';
+    renderGSheet();
+  }).catch(e=>{document.getElementById("gsRefresh").textContent='❌ 載入失敗：'+e.message});
+}
+
+function parseCSV(text){
+  const rows=[];let row=[];let cur="";let inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){if(c==='"'&&text[i+1]==='"'){cur+='"';i++}else if(c==='"'){inQ=false}else{cur+=c}}
+    else{if(c==='"'){inQ=true}else if(c===','){row.push(cur);cur=""}else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur=""}else if(c==='\r'){if(text[i+1]==='\n')i++;row.push(cur);rows.push(row);row=[];cur=""}else{cur+=c}}
+  }
+  if(cur.length||row.length){row.push(cur);rows.push(row)}
+  return rows;
+}
+
+function gsCol(name){const nn=name.replace(/[\n\r]/g,' ').replace(/\s+/g,' ').trim();const idx=gsCols.findIndex(c=>{const cn=c.replace(/[\n\r]/g,' ').replace(/\s+/g,' ').trim();return cn===nn||cn.endsWith(' '+nn)||cn.endsWith(nn)});return idx>=0?idx:-1}
+function gsVal(r,name){const i=gsCol(name);return i>=0?(r[i]||"").trim():""}
+function gsPct(r,name){const v=gsVal(r,name);if(!v)return-1;const m=v.match(/(\d+)/);return m?parseInt(m[1]):-1}
+
+function gsOverallStatus(r){
+  const oqc=gsPct(r,"Supplier OQC %");
+  const grn=gsVal(r,"Buyer GRN Date");
+  if(grn)return"done";
+  if(oqc===100){const etd=gsVal(r,"Supplier Estimated ETD date");return etd?"shipped":"oqc_done"}
+  if(oqc>0&&oqc<100)return"in_progress";
+  const asm=gsPct(r,"Supplier Assembling %");
+  if(asm>0)return"in_progress";
+  const gap=parseInt(gsVal(r,"Auto GAP"));
+  if(gap<0)return"delayed";
+  return"pending";
+}
+
+function gsStatusTag(status){
+  const map={done:["✅ GRN Done","green"],shipped:["✈️ Shipped","blue"],oqc_done:["🔍 OQC Done","green"],in_progress:["🔧 In Progress","amber"],delayed:["⚠️ Delayed","red"],pending:["⏳ Pending","gray"]};
+  const[text,cls]=map[status]||["—","gray"];
+  return'<span class="gs-tag '+cls+'">'+text+'</span>';
+}
+
+function msBar(pct){
+  if(pct<0)return'<span class="ms-bar"><span class="ms-bar-fill" style="width:0%"></span></span> —';
+  const color=pct>=100?"#22c55e":pct>=50?"#3b82f6":pct>0?"#f59e0b":"#e2e8f0";
+  return'<span class="ms-bar"><span class="ms-bar-fill" style="width:'+pct+'%;background:'+color+'"></span></span> '+pct+'%';
+}
+
+function renderGSheet(){
+  if(!gsData.length)return;
+  // Summary cards
+  const total=gsData.length;
+  const totalQty=gsData.reduce((s,r)=>s+(parseInt(gsVal(r,"MPM/MC Demand Qty"))||0),0);
+  const delayed=gsData.filter(r=>{const g=parseInt(gsVal(r,"Auto GAP"));return g<0}).length;
+  const shipped=gsData.filter(r=>gsOverallStatus(r)==="shipped"||gsOverallStatus(r)==="done").length;
+  const inProg=gsData.filter(r=>gsOverallStatus(r)==="in_progress").length;
+  const pending=gsData.filter(r=>gsOverallStatus(r)==="pending").length;
+  document.getElementById("gsCards").innerHTML=
+    '<div class="gs-card"><div class="gs-num">'+total+'</div><div class="gs-label">Total Orders</div></div>'+
+    '<div class="gs-card"><div class="gs-num">'+totalQty+'</div><div class="gs-label">Total Qty</div></div>'+
+    '<div class="gs-card ok"><div class="gs-num">'+shipped+'</div><div class="gs-label">✅ Shipped / Done</div></div>'+
+    '<div class="gs-card"><div class="gs-num">'+inProg+'</div><div class="gs-label">🔧 In Progress</div></div>'+
+    '<div class="gs-card warn"><div class="gs-num">'+delayed+'</div><div class="gs-label">⚠️ GAP &lt; 0 (Delayed)</div></div>'+
+    '<div class="gs-card"><div class="gs-num">'+pending+'</div><div class="gs-label">⏳ Pending</div></div>';
+  // Filters
+  const projects=[...new Set(gsData.map(r=>gsVal(r,"MPM Project")))].filter(Boolean).sort();
+  const suppliers=[...new Set(gsData.map(r=>gsVal(r,"MPM Supplier")))].filter(Boolean).sort();
+  const phases=[...new Set(gsData.map(r=>gsVal(r,"MPM 階段\nProject Phase")))].filter(Boolean).sort();
+  document.getElementById("gsFilters").innerHTML=
+    '<select onchange="gsFilterProject=this.value;renderGSheetTable()"><option value="">All Projects</option>'+projects.map(p=>'<option value="'+esc(p)+'" '+(gsFilterProject===p?"selected":"")+'>'+esc(p)+'</option>').join("")+'</select>'+
+    '<select onchange="gsFilterSupplier=this.value;renderGSheetTable()"><option value="">All Suppliers</option>'+suppliers.map(s=>'<option value="'+esc(s)+'" '+(gsFilterSupplier===s?"selected":"")+'>'+esc(s)+'</option>').join("")+'</select>'+
+    '<select onchange="gsFilterPhase=this.value;renderGSheetTable()"><option value="">All Phases</option>'+phases.map(p=>'<option value="'+esc(p)+'" '+(gsFilterPhase===p?"selected":"")+'>'+esc(p)+'</option>').join("")+'</select>'+
+    '<select onchange="gsFilterStatus=this.value;renderGSheetTable()"><option value="">All Status</option><option value="delayed" '+(gsFilterStatus==="delayed"?"selected":"")+'>⚠️ Delayed</option><option value="in_progress" '+(gsFilterStatus==="in_progress"?"selected":"")+'>🔧 In Progress</option><option value="shipped" '+(gsFilterStatus==="shipped"?"selected":"")+'>✈️ Shipped</option><option value="done" '+(gsFilterStatus==="done"?"selected":"")+'>✅ Done</option><option value="pending" '+(gsFilterStatus==="pending"?"selected":"")+'>⏳ Pending</option></select>'+
+    '<input type="search" placeholder="🔍 Search Spec..." value="'+esc(gsSearch)+'" oninput="gsSearch=this.value;renderGSheetTable()">';
+  renderGSheetTable();
+}
+
+function renderGSheetTable(){
+  let rows=gsData.slice();
+  if(gsFilterProject)rows=rows.filter(r=>gsVal(r,"MPM Project")===gsFilterProject);
+  if(gsFilterSupplier)rows=rows.filter(r=>gsVal(r,"MPM Supplier")===gsFilterSupplier);
+  if(gsFilterPhase)rows=rows.filter(r=>gsVal(r,"MPM 階段\nProject Phase")===gsFilterPhase);
+  if(gsFilterStatus)rows=rows.filter(r=>gsOverallStatus(r)===gsFilterStatus);
+  if(gsSearch){const q=gsSearch.toLowerCase();rows=rows.filter(r=>r.some(c=>c.toLowerCase().includes(q)))}
+  if(gsSortCol>=0){rows.sort((a,b)=>{const va=a[gsSortCol]||"",vb=b[gsSortCol]||"";const na=parseFloat(va.replace(/[^\d.-]/g,'')),nb=parseFloat(vb.replace(/[^\d.-]/g,''));if(!isNaN(na)&&!isNaN(nb))return gsSortAsc?na-nb:nb-na;return gsSortAsc?va.localeCompare(vb):vb.localeCompare(va)})}
+  const cols=[
+    {name:"MPM/OPM Spec",label:"Spec"},
+    {name:"MPM Project",label:"Project"},
+    {name:"MPM 階段\nProject Phase",label:"Phase"},
+    {name:"MPM Supplier",label:"Supplier"},
+    {name:"MPM Customer KO Date",label:"KO Date"},
+    {name:"MPM ETA Target",label:"ETA Target"},
+    {name:"Auto/Manual\nBuyer Revised ETA/Actual ETA",label:"Revised ETA"},
+    {name:"Auto GAP",label:"GAP"},
+    {name:"MPM/MC Demand Qty",label:"Qty"},
+    {name:"Supplier Drawing disassembly %",label:"Draw %"},
+    {name:"Supplier Raw Material %",label:"RM %"},
+    {name:"Supplier STD Part purchase %",label:"STD %"},
+    {name:"Supplier Machining %",label:"Mach %"},
+    {name:"Supplier Surface Treatment %",label:"Surf %"},
+    {name:"Supplier Assembling %",label:"Asm %"},
+    {name:"Supplier OQC %",label:"OQC %"},
+    {name:"Supplier Estimated ETD date",label:"ETD"},
+    {name:"Buyer Flight/BOE Status",label:"Flight"},
+    {name:"Buyer GRN Date",label:"GRN"},
+    {name:"_status",label:"Status"}
+  ];
+  let h='<thead><tr>';
+  cols.forEach((c,ci)=>{h+='<th onclick="gsSort('+ci+')">'+c.label+'</th>'});
+  h+='</tr></thead><tbody>';
+  rows.forEach(r=>{
+    h+='<tr>';
+    cols.forEach(c=>{
+      if(c.name==="_status"){h+='<td>'+gsStatusTag(gsOverallStatus(r))+'</td>'}
+      else if(c.name==="Supplier Drawing disassembly %"||c.name==="Supplier Raw Material %"||c.name==="Supplier STD Part purchase %"||c.name==="Supplier Machining %"||c.name==="Supplier Surface Treatment %"||c.name==="Supplier Assembling %"||c.name==="Supplier OQC %"){
+        h+='<td>'+msBar(gsPct(r,c.name))+'</td>';
+      }else if(c.name==="Auto GAP"){
+        const v=gsVal(r,c.name);const n=parseInt(v);
+        h+='<td style="color:'+(n<0?"var(--red)":n>0?"var(--green)":"inherit")+';font-weight:'+(n!==0?"700":"400")+'">'+(v||"—")+'</td>';
+      }else if(c.name==="Buyer Flight/BOE Status"){
+        const v=gsVal(r,c.name);
+        h+='<td>'+(v?'<span class="gs-tag blue">'+esc(v)+'</span>':'—')+'</td>';
+      }else{
+        h+='<td>'+esc(gsVal(r,c.name)||"—")+'</td>';
+      }
+    });
+    h+='</tr>';
+  });
+  h+='</tbody>';
+  document.getElementById("gsTable").innerHTML=h;
+}
+
+function gsSort(colIdx){
+  if(gsSortCol===colIdx){gsSortAsc=!gsSortAsc}else{gsSortCol=colIdx;gsSortAsc=true}
+  renderGSheetTable();
 }
 
 /* ==================== 初始化 ==================== */
