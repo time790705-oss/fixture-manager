@@ -1514,7 +1514,7 @@ function arVal(r,name){
   return idx>=0?(r[idx]||"").trim():"";
 }
 function arPct(r,name){const v=arVal(r,name);if(!v)return-1;const m=v.match(/(\d+)/);return m?parseInt(m[1]):-1}
-function arGap(r){const v=arVal(r,"Auto GAP");const n=parseInt(v);return isNaN(n)?null:n}
+function arGap(r){const v=arVal(r,"GAP");const n=parseInt(v);return isNaN(n)?null:n}
 
 function calcSupplierPerformance(){
   const supMap=new Map();
@@ -1526,9 +1526,9 @@ function calcSupplierPerformance(){
     s.total++;
     s.orders.push({spec:arVal(r,"Spec"),project:arVal(r,"Project"),phase:arVal(r,"階段\nProject Phase")});
     const gap=arGap(r);
-    if(gap!==null){s.totalGap+=gap;s.gapCount++;if(gap<=0)s.onTime++;else s.late++}
+    if(gap!==null&&Math.abs(gap)<=365){s.totalGap+=gap;s.gapCount++;if(gap<=0)s.onTime++;else s.late++}
     const lt=parseInt(arVal(r,"Supplier LT"));
-    if(!isNaN(lt)&&lt>0){s.avgLT+=lt;s.ltCount++}
+    if(!isNaN(lt)&&lt>0&&lt<=365){s.avgLT+=lt;s.ltCount++}
   });
   const result=[];
   supMap.forEach(s=>{
