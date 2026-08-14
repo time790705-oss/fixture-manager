@@ -1378,15 +1378,16 @@ let gsFilterProject="",gsFilterSupplier="",gsFilterPhase="",gsFilterStatus="",gs
 
 function fetchGSheet(){
   const url="https://docs.google.com/spreadsheets/d/"+GS_ID+"/gviz/tq?tqx=out:csv&sheet="+GS_SHEET;
-  document.getElementById("gsRefresh").innerHTML='⏳ 載入中...';
-  fetch(url).then(r=>r.text()).then(csv=>{
+  const el=document.getElementById("gsRefresh");
+  if(el)el.innerHTML='⏳ 載入中...';
+  return fetch(url).then(r=>r.text()).then(csv=>{
     const rows=parseCSV(csv);
-    if(rows.length<2){document.getElementById("gsRefresh").textContent='❗ 無資料';return}
+    if(rows.length<2){if(el)el.textContent='❗ 無資料';return}
     gsCols=rows[0];
     gsData=rows.slice(1).filter(r=>r.some(c=>c.trim()));
-    document.getElementById("gsRefresh").innerHTML='✅ 最後更新：'+new Date().toLocaleTimeString()+' <button class="btn btn-secondary btn-sm" onclick="fetchGSheet()" style="margin-left:8px;padding:3px 10px">🔄 重新整理</button>';
+    if(el)el.innerHTML='✅ 最後更新：'+new Date().toLocaleTimeString()+' <button class="btn btn-secondary btn-sm" onclick="fetchGSheet()" style="margin-left:8px;padding:3px 10px">🔄 重新整理</button>';
     renderGSheet();
-  }).catch(e=>{document.getElementById("gsRefresh").textContent='❌ 載入失敗：'+e.message});
+  }).catch(e=>{if(el)el.textContent='❌ 載入失敗：'+e.message});
 }
 
 function parseCSV(text){
