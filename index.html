@@ -417,6 +417,7 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <section id="page-notifications" class="page"><div class="card"><h3 data-i18n="notifH">🔔 通知中心</h3><div id="notifView"></div></div></section>
 <section id="page-gsheet" class="page"><div class="card"><h3>📊 Google Sheet — Working Table</h3>
 <div id="gsRefresh" class="gs-refresh"></div>
+<div id="gsDataWarn"></div>
 <div id="gsCards" class="gs-cards"></div>
 <div class="gs-filters" id="gsFilters"></div>
 <div class="gs-wrap"><table class="gs-table" id="gsTable"></table></div>
@@ -1473,6 +1474,16 @@ function fetchGSheet(){
     if(rows.length<2){if(el)el.textContent='❗ 無資料';return}
     gsCols=rows[0];
     const newData=rows.slice(1).filter(r=>r.some(c=>c.trim()));
+    // 檢查資料數量是否異常減少（可能有隱藏列）
+    const prevCount=gsData.length;
+    const newCount=newData.length;
+    if(prevCount>0&&newCount<prevCount*0.8){
+      const warnEl=document.getElementById("gsDataWarn");
+      if(warnEl)warnEl.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;margin:10px 0;color:var(--red);font-size:12px">⚠️ <b>資料數量異常！</b>上次載入 '+prevCount+' 筆，這次只有 '+newCount+' 筆（減少 '+(prevCount-newCount)+' 筆）。<br>請檢查 Google Sheet 是否有<b>隱藏列</b>或<b>篩選器</b>啟用中。系統只會讀取可見的列。</div>';
+    }else{
+      const warnEl=document.getElementById("gsDataWarn");
+      if(warnEl)warnEl.innerHTML="";
+    }
     // 偵測變更
     gsChanges=detectChanges(gsData,newData,gsCols);
     gsData=newData;
