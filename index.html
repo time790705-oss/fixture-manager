@@ -644,18 +644,25 @@ function gsOrders(){
       return normDate(v,refYear);
     }
     // 組合里程碑（日期統一為 YYYY-MM-DD 格式）
+    // 用進度百分比決定狀態：100%=done, >0%=doing, 0%=todo
     const milestones=[];
+    const drawingPct=gsPct(r,"Supplier Drawing disassembly %");
     const drawingDate=endDate("Supplier Drawing disassembly Start -End Date");
-    if(drawingDate)milestones.push({name:"Drawing Disassembly",plannedDate:drawingDate,actualDate:""});
+    if(drawingDate)milestones.push({name:"Drawing Disassembly",plannedDate:drawingDate,actualDate:drawingPct>=100?drawingDate:"",status:drawingPct>=100?"done":drawingPct>0?"doing":"",msProgress:drawingPct>=0?drawingPct:0});
+    const rmPct=gsPct(r,"Supplier RM purchase %");
     const rmDate=endDate("Supplier RM purchase Start -End Date");
-    if(rmDate)milestones.push({name:"Raw Material Purchase",plannedDate:rmDate,actualDate:""});
+    if(rmDate)milestones.push({name:"Raw Material Purchase",plannedDate:rmDate,actualDate:rmPct>=100?rmDate:"",status:rmPct>=100?"done":rmPct>0?"doing":"",msProgress:rmPct>=0?rmPct:0});
+    const stdPct=gsPct(r,"Supplier STD part purchase %");
     const stdDate=endDate("Supplier STD part purchase Start -End Date");
-    if(stdDate)milestones.push({name:"STD Part Purchase",plannedDate:stdDate,actualDate:""});
-    if(etaTarget)milestones.push({name:"Machining",plannedDate:etaTarget,actualDate:""});
-    if(etaTarget)milestones.push({name:"Assembly",plannedDate:etaTarget,actualDate:""});
-    if(inspDate)milestones.push({name:"OQC Inspection",plannedDate:inspDate,actualDate:inspDate});
-    if(etd)milestones.push({name:"Shipment (ETD)",plannedDate:etd,actualDate:flightDate||""});
-    if(grnDate)milestones.push({name:"GRN (Receiving)",plannedDate:etaTarget||"",actualDate:grnDate});
+    if(stdDate)milestones.push({name:"STD Part Purchase",plannedDate:stdDate,actualDate:stdPct>=100?stdDate:"",status:stdPct>=100?"done":stdPct>0?"doing":"",msProgress:stdPct>=0?stdPct:0});
+    const machPct=gsPct(r,"Supplier Machining %");
+    if(etaTarget)milestones.push({name:"Machining",plannedDate:etaTarget,actualDate:machPct>=100?etaTarget:"",status:machPct>=100?"done":machPct>0?"doing":"",msProgress:machPct>=0?machPct:0});
+    const asmPct=gsPct(r,"Supplier Assembling %");
+    if(etaTarget)milestones.push({name:"Assembly",plannedDate:etaTarget,actualDate:asmPct>=100?etaTarget:"",status:asmPct>=100?"done":asmPct>0?"doing":"",msProgress:asmPct>=0?asmPct:0});
+    const oqcPct=gsPct(r,"Supplier OQC %");
+    if(inspDate)milestones.push({name:"OQC Inspection",plannedDate:inspDate,actualDate:oqcPct>=100?inspDate:"",status:oqcPct>=100?"done":oqcPct>0?"doing":"",msProgress:oqcPct>=0?oqcPct:0});
+    if(etd)milestones.push({name:"Shipment (ETD)",plannedDate:etd,actualDate:flightDate||"",status:flightDate?"done":etd?"doing":"",msProgress:flightDate?100:0});
+    if(grnDate)milestones.push({name:"GRN (Receiving)",plannedDate:etaTarget||"",actualDate:grnDate,status:"done",msProgress:100});
     return{
       id:spec,name:spec,phase:phase||"",
       supplierId:"",supplier:supplier,project:project,
