@@ -2026,11 +2026,14 @@ function toggleDueDays(){
 function renderDashDueSoon(){
   if(!gsData.length){document.getElementById("dashDueSoon").innerHTML='<div class="empty">等待資料...</div>';return}
   const now=new Date();now.setHours(0,0,0,0);
+  const curYear=now.getFullYear();
   const soon=[];
   gsData.forEach((r,i)=>{
     const eta=gsVal(r,"MPM ETA Target");
     if(!eta)return;
-    const etaDate=parseDate(eta);
+    // 用 normDate 確保年份正確（處理 M/D 格式）
+    const etaNorm=normDate(eta,curYear);
+    const etaDate=parseDate(etaNorm);
     if(!etaDate)return;
     const days=Math.floor((etaDate-now)/(1000*60*60*24));
     if(days>=0&&days<=dueDays){
