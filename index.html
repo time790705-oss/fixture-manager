@@ -597,7 +597,64 @@ function supplierName(id){const s=data.suppliers.find(x=>x.id===id);return s?s.n
 function calcTargetEtaAuto(koDate,level){if(!koDate||!level)return"";const d=parseDate(koDate);if(!d)return"";const days=(level==="Level I"||level==="Level II")?19:22;const r=new Date(d.getTime()+days*86400000);return r.getFullYear()+"-"+String(r.getMonth()+1).padStart(2,"0")+"-"+String(r.getDate()).padStart(2,"0")}
 function calcNbdAuto(koDate,type){if(!koDate||!type)return"";const d=parseDate(koDate);if(!d)return"";const weeks={FATP:4,CCB:2,SAE:9};const w=weeks[type]||0;if(!w)return"";const r=new Date(d.getTime()+w*7*86400000);return r.getFullYear()+"-"+String(r.getMonth()+1).padStart(2,"0")+"-"+String(r.getDate()).padStart(2,"0")}
 function showAutoCalc(){const ko=document.getElementById("oCustomerKo").value;const lv=document.getElementById("oLevel").value;const tp=document.getElementById("oType").value;const etaEl=document.getElementById("autoTargetEtaDisp");const nbdEl=document.getElementById("autoNbdDisp");if(etaEl){const v=calcTargetEtaAuto(ko,lv);etaEl.textContent=v?t("calcTargetEta")+": "+fmtDate(v):""}if(nbdEl){const v2=calcNbdAuto(ko,tp);nbdEl.textContent=v2?t("calcNbd")+": "+fmtDate(v2):""}}
-function scopeOrders(){return role==="supplier"&&currentSupplierId?data.orders.filter(o=>o.supplierId===currentSupplierId||o.supplier===supplierName(currentSupplierId)):data.orders}
+function scopeOrders(){
+  // 優先使用 Google Sheet 資料（若 data.orders 為空但 gsData 有資料）
+  if(!data.orders.length&&gsData.length)return gsOrders();
+  return role==="supplier"&&currentSupplierId?data.orders.filter(o=>o.supplierId===currentSupplierId||o.supplier===supplierName(currentSupplierId)):data.orders;
+}
+/* 將 Google Sheet 資料轉換為訂單+里程碑格式（供 Timeline/日曆使用） */
+function gsOrders(){
+  return gsData.map(r=>{
+    const spec=gsVal(r,"MPM/OPM Spec");
+    const supplier=gsVal(r,"MPM Supplier");
+    const project=gsVal(r,"MPM Project");
+    const phase=gsVal(r,"MPM 階段\nProject Phase");
+    const koDate=gsVal(r,"MPM Customer KO Date");
+    const etaTarget=gsVal(r,"MPM ETA Target");
+    const etd=gsVal(r,"Supplier Estimated ETD date");
+    const flightDate=gsVal(r,"Flight Date");
+    const grnDate=gsVal(r,"Buyer GRN Date");
+    const inspDate=gsVal(r,"Supplier Inspection Date");
+    // 從日期範圍欄位取結束日期作為 planned
+    function endDate(colName){
+      const v=gsVal(r,colName);if(!v)return"";
+      // 格式可能是 "2025/01/01-2025/02/15" 或單一日期
+      const parts=v.split(/[-–—\/]/);
+      if(parts.length>=2){
+        // 嘗試找出日期格式的部分
+        for(let i=parts.length-1;i>=0;i--){
+          const p=parts[i].trim();
+          if(p&&parseDate(p))return p;
+        }
+      }
+      return v;
+    }
+    // 組合里程碑
+    const milestones=[];
+    const drawingDate=endDate("Supplier Drawing disassembly Start -End Date");
+    if(drawingDate)milestones.push({name:"Drawing Disassembly",plannedDate:drawingDate,actualDate:""});
+    const rmDate=endDate("Supplier RM purchase Start -End Date");
+    if(rmDate)milestones.push({name:"Raw Material Purchase",plannedDate:rmDate,actualDate:""});
+    const stdDate=endDate("Supplier STD part purchase Start -End Date");
+    if(stdDate)milestones.push({name:"STD Part Purchase",plannedDate:stdDate,actualDate:""});
+    // 加工完成：用 ETA Target 作為 planned
+    if(etaTarget)milestones.push({name:"Machining",plannedDate:etaTarget,actualDate:""});
+    // 組裝完成
+    if(etaTarget)milestones.push({name:"Assembly",plannedDate:etaTarget,actualDate:""});
+    // OQC 檢驗
+    if(inspDate)milestones.push({name:"OQC Inspection",plannedDate:inspDate,actualDate:inspDate});
+    // 出運
+    if(etd)milestones.push({name:"Shipment (ETD)",plannedDate:etd,actualDate:flightDate||""});
+    // 收貨
+    if(grnDate)milestones.push({name:"GRN (Receiving)",plannedDate:etaTarget||"",actualDate:grnDate});
+    return{
+      id:spec,name:spec,phase:phase||"",
+      supplierId:"",supplier:supplier,project:project,
+      quantity:"",orderDate:koDate,dueDate:etaTarget,
+      milestones:milestones
+    };
+  }).filter(o=>o.id);
+}
 function nextSupplierId(){let n=data.suppliers.length+1;while(data.suppliers.some(s=>s.id==="S"+String(n).padStart(3,"0")))n++;return"S"+String(n).padStart(3,"0")}
 function nextOrderId(){let n=data.orders.length+1;while(data.orders.some(o=>o.id==="JIG-"+String(n).padStart(3,"0")))n++;return"JIG-"+String(n).padStart(3,"0")}
 
@@ -651,6 +708,7 @@ function go(p){
   if(p==="gsheet"&&!gsData.length)fetchGSheet();
   if(p==="performance"&&!arData.length){fetchARSheet().then(()=>{renderSupplierPerf();renderPerf()})}
   if(p==="dashboard"&&!gsData.length)fetchGSheet();
+  if((p==="gantt"||p==="calendar")&&!gsData.length)fetchGSheet().then(()=>{renderAll()});
 }
 
 /* ==================== 渲染 ==================== */
