@@ -1466,7 +1466,8 @@ let gsFilterProject="",gsFilterSupplier="",gsFilterPhase="",gsFilterStatus="",gs
 let gsChanges=[]; // 儲存偵測到的變更
 
 function fetchGSheet(){
-  const url="https://docs.google.com/spreadsheets/d/"+GS_ID+"/gviz/tq?tqx=out:csv&sheet="+GS_SHEET;
+  // 使用 /export API 讀取所有資料（包含隱藏列，不受篩選器影響）
+  const url="https://docs.google.com/spreadsheets/d/"+GS_ID+"/export?format=csv&sheet="+GS_SHEET;
   const el=document.getElementById("gsRefresh");
   if(el)el.innerHTML='⏳ 載入中...';
   return fetch(url).then(r=>r.text()).then(csv=>{
