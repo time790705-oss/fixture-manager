@@ -649,10 +649,10 @@ function gsOrders(){
     const drawingPct=gsPct(r,"Supplier Drawing disassembly %");
     const drawingDate=endDate("Supplier Drawing disassembly Start -End Date");
     if(drawingDate)milestones.push({name:"Drawing Disassembly",plannedDate:drawingDate,actualDate:drawingPct>=100?drawingDate:"",status:drawingPct>=100?"done":drawingPct>0?"doing":"",msProgress:drawingPct>=0?drawingPct:0});
-    const rmPct=gsPct(r,"Supplier RM purchase %");
+    const rmPct=gsPct(r,"Supplier Raw Material %");
     const rmDate=endDate("Supplier RM purchase Start -End Date");
     if(rmDate)milestones.push({name:"Raw Material Purchase",plannedDate:rmDate,actualDate:rmPct>=100?rmDate:"",status:rmPct>=100?"done":rmPct>0?"doing":"",msProgress:rmPct>=0?rmPct:0});
-    const stdPct=gsPct(r,"Supplier STD part purchase %");
+    const stdPct=gsPct(r,"Supplier STD Part purchase %");
     const stdDate=endDate("Supplier STD part purchase Start -End Date");
     if(stdDate)milestones.push({name:"STD Part Purchase",plannedDate:stdDate,actualDate:stdPct>=100?stdDate:"",status:stdPct>=100?"done":stdPct>0?"doing":"",msProgress:stdPct>=0?stdPct:0});
     const machPct=gsPct(r,"Supplier Machining %");
