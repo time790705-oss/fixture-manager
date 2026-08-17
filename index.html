@@ -603,10 +603,15 @@ function scopeOrders(){
   return role==="supplier"&&currentSupplierId?data.orders.filter(o=>o.supplierId===currentSupplierId||o.supplier===supplierName(currentSupplierId)):data.orders;
 }
 /* 將 Google Sheet 資料轉換為訂單+里程碑格式（供 Timeline/日曆使用） */
-function normDate(v){
+function normDate(v,refYear){
   if(!v)return"";
-  const d=parseDate(v);
-  if(!d)return v;
+  let d=parseDate(v);
+  if(!d)return"";
+  // 如果年份 < 2010，表示原始資料沒有年份，需補上參考年
+  if(d.getFullYear()<2010){
+    const yr=refYear||new Date().getFullYear();
+    d=new Date(yr,d.getMonth(),d.getDate());
+  }
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
 function gsOrders(){
@@ -615,12 +620,16 @@ function gsOrders(){
     const supplier=gsVal(r,"MPM Supplier");
     const project=gsVal(r,"MPM Project");
     const phase=gsVal(r,"MPM 階段\nProject Phase");
-    const koDate=normDate(gsVal(r,"MPM Customer KO Date"));
-    const etaTarget=normDate(gsVal(r,"MPM ETA Target"));
-    const etd=normDate(gsVal(r,"Supplier Estimated ETD date"));
-    const flightDate=normDate(gsVal(r,"Flight Date"));
-    const grnDate=normDate(gsVal(r,"Buyer GRN Date"));
-    const inspDate=normDate(gsVal(r,"Supplier Inspection Date"));
+    // 用 KO Date 的年份作為參考（如果有的話）
+    const koRaw=gsVal(r,"MPM Customer KO Date");
+    const koDate=normDate(koRaw);
+    const koD=parseDate(koRaw);
+    const refYear=koD&&koD.getFullYear()>2010?koD.getFullYear():new Date().getFullYear();
+    const etaTarget=normDate(gsVal(r,"MPM ETA Target"),refYear);
+    const etd=normDate(gsVal(r,"Supplier Estimated ETD date"),refYear);
+    const flightDate=normDate(gsVal(r,"Flight Date"),refYear);
+    const grnDate=normDate(gsVal(r,"Buyer GRN Date"),refYear);
+    const inspDate=normDate(gsVal(r,"Supplier Inspection Date"),refYear);
     // 從日期範圍欄位取結束日期作為 planned
     function endDate(colName){
       const v=gsVal(r,colName);if(!v)return"";
@@ -629,10 +638,10 @@ function gsOrders(){
       if(parts.length>=2){
         for(let i=parts.length-1;i>=0;i--){
           const p=parts[i].trim();
-          if(p&&parseDate(p))return normDate(p);
+          if(p&&parseDate(p))return normDate(p,refYear);
         }
       }
-      return normDate(v);
+      return normDate(v,refYear);
     }
     // 組合里程碑（日期統一為 YYYY-MM-DD 格式）
     const milestones=[];
