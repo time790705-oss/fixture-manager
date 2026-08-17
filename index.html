@@ -1405,6 +1405,11 @@ function fetchGSheet(){
     saveSnapshot();
     if(el)el.innerHTML='✅ 最後更新：'+new Date().toLocaleTimeString()+' <button class="btn btn-secondary btn-sm" onclick="fetchGSheet()" style="margin-left:8px;padding:3px 10px">🔄 重新整理</button>';
     renderGSheet();
+    // 同步更新儀表板和其他頁面
+    renderDashboard();
+    renderSuppliers();
+    renderOrders();
+    renderAlerts();
   }).catch(e=>{if(el)el.textContent='❌ 載入失敗：'+e.message});
 }
 
@@ -1429,8 +1434,22 @@ function detectChanges(oldData,newData,cols){
   if(specIdx<0)return changes;
   const oldMap=new Map();
   oldData.forEach(r=>{const key=r[specIdx]||"";if(key)oldMap.set(key,r)});
-  // 比對新資料
+  const newMap=new Map();
+  newData.forEach(r=>{const key=r[specIdx]||"";if(key)newMap.set(key,r)});
   const now=Date.now();
+  // 1. 偵測被刪除的訂單（舊資料有，新資料沒有）
+  oldMap.forEach((row,key)=>{
+    if(!newMap.has(key)){
+      changes.push({spec:key,field:"__deleted__",oldVal:"存在",newVal:"已刪除",time:now});
+    }
+  });
+  // 2. 偵測新增的訂單（新資料有，舊資料沒有）
+  newMap.forEach((row,key)=>{
+    if(!oldMap.has(key)){
+      changes.push({spec:key,field:"__added__",oldVal:"無",newVal:"新增訂單",time:now});
+    }
+  });
+  // 3. 偵測欄位值變更
   newData.forEach(r=>{
     const key=r[specIdx]||"";
     if(!key)return;
@@ -1962,29 +1981,65 @@ function renderDashChangelog(){
     el.innerHTML='<div style="color:var(--muted);padding:8px;font-size:12px">ℹ️ 本次載入未偵測到資料變更。\n<br><span style="font-size:11px">變更追蹤從下次重新整理開始生效（系統會記住本次資料，下次載入時比對）。</span></div>';
     return;
   }
-  // 依 Spec 分組
-  const bySpec=new Map();
-  gsChanges.forEach(c=>{
-    if(!bySpec.has(c.spec))bySpec.set(c.spec,[]);
-    bySpec.get(c.spec).push(c);
-  });
-  let h='<div style="font-size:12px;color:var(--muted);margin-bottom:6px">共偵測到 '+gsChanges.length+' 處變更（'+bySpec.size+' 筆訂單）</div>';
-  h+='<div style="max-height:300px;overflow-y:auto">';
-  [...bySpec.entries()].forEach(([spec,changes])=>{
-    h+='<div class="changelog-item">';
-    h+='<span class="cl-spec">'+esc(spec)+'</span>';
-    h+='<div style="margin-top:4px">';
-    changes.forEach(c=>{
-      const shortField=c.field.replace(/Supplier /,'').replace(/MPM /,'');
-      h+='<div style="margin-left:8px;margin-bottom:2px">';
-      h+='<span class="cl-field">'+esc(shortField)+':</span> ';
-      h+='<span class="cl-old">'+esc(c.oldVal||'(空)')+'</span>';
-      h+='<span class="cl-new">'+esc(c.newVal||'(空)')+'</span>';
+  // 統計
+  const deleted=gsChanges.filter(c=>c.field==="__deleted__");
+  const added=gsChanges.filter(c=>c.field==="__added__");
+  const modified=gsChanges.filter(c=>c.field!=="__deleted__"&&c.field!=="__added__");
+  // 摘要
+  let h='<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
+  if(deleted.length)h+='<span class="badge red">❌ '+deleted.length+' 筆訂單被刪除</span>';
+  if(added.length)h+='<span class="badge green">✅ '+added.length+' 筆新增訂單</span>';
+  if(modified.length)h+='<span class="badge amber">✏️ '+modified.length+' 處欄位修改</span>';
+  h+='</div>';
+  // 刪除的訂單（最優先顯示）
+  if(deleted.length){
+    h+='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;margin-bottom:10px">';
+    h+='<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px">❌ 被刪除的訂單</div>';
+    deleted.forEach(c=>{
+      h+='<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #fee2e2">';
+      h+='<span style="font-weight:700;color:var(--red)">'+esc(c.spec)+'</span>';
+      h+='<span style="color:var(--muted);font-size:11px;margin-left:8px">已從 Google Sheet 移除</span>';
       h+='</div>';
     });
-    h+='</div></div>';
-  });
-  h+='</div>';
+    h+='</div>';
+  }
+  // 新增的訂單
+  if(added.length){
+    h+='<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;margin-bottom:10px">';
+    h+='<div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">✅ 新增的訂單</div>';
+    added.forEach(c=>{
+      h+='<div style="font-size:12px;padding:3px 0;border-bottom:1px solid #dcfce7">';
+      h+='<span style="font-weight:700;color:var(--green)">'+esc(c.spec)+'</span>';
+      h+='<span style="color:var(--muted);font-size:11px;margin-left:8px">新訂單</span>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+  // 欄位修改（依 Spec 分組）
+  if(modified.length){
+    const bySpec=new Map();
+    modified.forEach(c=>{
+      if(!bySpec.has(c.spec))bySpec.set(c.spec,[]);
+      bySpec.get(c.spec).push(c);
+    });
+    h+='<div style="font-size:12px;color:var(--muted);margin-bottom:6px">✏️ '+modified.length+' 處欄位修改（'+bySpec.size+' 筆訂單）</div>';
+    h+='<div style="max-height:250px;overflow-y:auto">';
+    [...bySpec.entries()].forEach(([spec,changes])=>{
+      h+='<div class="changelog-item">';
+      h+='<span class="cl-spec">'+esc(spec)+'</span>';
+      h+='<div style="margin-top:4px">';
+      changes.forEach(c=>{
+        const shortField=c.field.replace(/Supplier /,'').replace(/MPM /,'');
+        h+='<div style="margin-left:8px;margin-bottom:2px">';
+        h+='<span class="cl-field">'+esc(shortField)+':</span> ';
+        h+='<span class="cl-old">'+esc(c.oldVal||'(空)')+'</span>';
+        h+='<span class="cl-new">'+esc(c.newVal||'(空)')+'</span>';
+        h+='</div>';
+      });
+      h+='</div></div>';
+    });
+    h+='</div>';
+  }
   el.innerHTML=h;
 }
 
@@ -2011,12 +2066,27 @@ function renderDashGSAlerts(){
     }
   });
   if(!issues.length){document.getElementById("dashGSIssues").innerHTML='<div style="color:var(--green);padding:8px">✅ Google Sheet 資料品質良好</div>';return}
-  let h='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">發現 '+issues.length+' 項資料問題：</div>';
   const byType={missing:issues.filter(x=>x.type==="missing"),delayed:issues.filter(x=>x.type==="delayed"),stuck:issues.filter(x=>x.type==="stuck")};
-  if(byType.missing.length)h+='<div style="margin-bottom:8px"><span class="gs-tag amber">⚠️ 欄位缺失 '+byType.missing.length+'</span><div style="margin-top:4px">'+byType.missing.slice(0,5).map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+(byType.missing.length>5?'<div style="font-size:11px;color:var(--muted)">...還有 '+(byType.missing.length-5)+' 項</div>':"")+'</div></div>';
-  if(byType.delayed.length)h+='<div style="margin-bottom:8px"><span class="gs-tag red">🔴 嚴重延遲 '+byType.delayed.length+'</span><div style="margin-top:4px">'+byType.delayed.slice(0,5).map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
-  if(byType.stuck.length)h+='<div style="margin-bottom:8px"><span class="gs-tag amber">🟡 流程卡關 '+byType.stuck.length+'</span><div style="margin-top:4px">'+byType.stuck.slice(0,5).map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
+  let h='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">發現 '+issues.length+' 項資料問題：</div>';
+  if(byType.missing.length){
+    h+='<div style="margin-bottom:8px"><span class="gs-tag amber" style="cursor:pointer" onclick="toggleIssueList(\'missing\')">⚠️ 欄位缺失 '+byType.missing.length+' <span id="missingToggle" style="font-size:10px">▼</span></span>';
+    h+='<div id="issueList_missing" style="display:none;margin-top:4px;max-height:200px;overflow-y:auto">'+byType.missing.map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
+  }
+  if(byType.delayed.length){
+    h+='<div style="margin-bottom:8px"><span class="gs-tag red" style="cursor:pointer" onclick="toggleIssueList(\'delayed\')">🔴 嚴重延遲 '+byType.delayed.length+' <span id="delayedToggle" style="font-size:10px">▼</span></span>';
+    h+='<div id="issueList_delayed" style="display:none;margin-top:4px;max-height:200px;overflow-y:auto">'+byType.delayed.map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
+  }
+  if(byType.stuck.length){
+    h+='<div style="margin-bottom:8px"><span class="gs-tag amber" style="cursor:pointer" onclick="toggleIssueList(\'stuck\')">🟡 流程卡關 '+byType.stuck.length+' <span id="stuckToggle" style="font-size:10px">▼</span></span>';
+    h+='<div id="issueList_stuck" style="display:none;margin-top:4px;max-height:200px;overflow-y:auto">'+byType.stuck.map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
+  }
   document.getElementById("dashGSIssues").innerHTML=h;
+}
+function toggleIssueList(type){
+  const el=document.getElementById("issueList_"+type);
+  const tog=document.getElementById(type+"Toggle");
+  if(el.style.display==="none"){el.style.display="block";tog.textContent="▲"}
+  else{el.style.display="none";tog.textContent="▼"}
 }
 
 /* ==================== 初始化 ==================== */
