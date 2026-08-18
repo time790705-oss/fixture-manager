@@ -1471,33 +1471,92 @@ function fetchGSheet(){
   const el=document.getElementById("gsRefresh");
   if(el)el.innerHTML='⏳ 載入中...';
   return fetch(url).then(r=>r.text()).then(csv=>{
-    const rows=parseCSV(csv);
+    let rows=parseCSV(csv);
     if(rows.length<2){if(el)el.textContent='❗ 無資料';return}
+    // 偵測新格式：如果第一列不包含预期的欄位名稱，表示 Google Sheet 結構已改變
+    const firstRow=rows[0].join(" ").toLowerCase();
+    const isNewFormat=!firstRow.includes("mpm/opm spec")&&!firstRow.includes("mpm supplier");
+    if(isNewFormat){
+      // 新格式：前幾列是摘要資料，真正的欄位標題在後面
+      // 尋找包含 "Spec" 和 "KO Date" 的列作為真正的欄位標題
+      let headerIdx=-1;
+      for(let i=0;i<Math.min(rows.length,50);i++){
+        const rowStr=rows[i].join(" ").toLowerCase();
+        if(rowStr.includes("spec")&&rowStr.includes("ko date")){headerIdx=i;break}
+      }
+      if(headerIdx<0){
+        // 找不到真正的欄位標題，嘗試找包含 "Spec" 的列
+        for(let i=0;i<Math.min(rows.length,50);i++){
+          if(rows[i].some(c=>c&&c.toLowerCase().includes("spec"))){headerIdx=i;break}
+        }
+      }
+      if(headerIdx>0){
+        // 使用找到的列作為欄位標題，資料從下一列開始
+        gsCols=rows[headerIdx];
+        const rawNewData=rows.slice(headerIdx+1).filter(r=>r.some(c=>c&&c.trim()));
+        // 新舊欄位名稱映射（新名稱 → 舊名稱，讓其餘程式碼不用改）
+        const colMap={
+          "Phase":"MPM 階段\nProject Phase",
+          "KO Date":"MPM Customer KO Date",
+          "Target Date":"MPM ETA Target",
+          "Fixture Manufacturer 治具廠":"MPM Supplier",
+          "Spec":"MPM/OPM Spec",
+          "Spec/model":"MPM/OPM Spec",
+          "Manufacturer-Supplier":"MPM Supplier",
+          "Latest ETA":"MPM ETA Target",
+          "GRN Date":"Buyer GRN Date",
+          "Gap":"Auto GAP",
+          "Project":"MPM Project",
+          "Fixture":"Fixture",
+          "Level":"Auto Fixture Level"
+        };
+        // 重新命名欄位
+        gsCols=gsCols.map(c=>{
+          const trimmed=(c||"").trim();
+          return colMap[trimmed]||trimmed;
+        });
+        // 確保欄位數量足夠（填充空欄位）
+        while(gsCols.length<53)gsCols.push("");
+        // 填充資料列以匹配欄位數量
+        const newData=rawNewData.map(r=>{
+          const padded=r.slice();
+          while(padded.length<gsCols.length)padded.push("");
+          return padded;
+        });
+        processNewData(newData,el);
+        return;
+      }
+    }
+    // 舊格式處理
     gsCols=rows[0];
     const newData=rows.slice(1).filter(r=>r.some(c=>c.trim()));
-    // 檢查資料數量是否異常減少（可能有隱藏列）
-    const prevCount=gsData.length;
-    const newCount=newData.length;
-    if(prevCount>0&&newCount<prevCount*0.8){
-      const warnEl=document.getElementById("gsDataWarn");
-      if(warnEl)warnEl.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;margin:10px 0;color:var(--red);font-size:12px">⚠️ <b>資料數量異常！</b>上次載入 '+prevCount+' 筆，這次只有 '+newCount+' 筆（減少 '+(prevCount-newCount)+' 筆）。<br>請檢查 Google Sheet 是否有<b>隱藏列</b>或<b>篩選器</b>啟用中。系統只會讀取可見的列。</div>';
-    }else{
-      const warnEl=document.getElementById("gsDataWarn");
-      if(warnEl)warnEl.innerHTML="";
-    }
-    // 偵測變更
-    gsChanges=detectChanges(gsData,newData,gsCols);
-    gsData=newData;
-    // 儲存快照到 localStorage
-    saveSnapshot();
-    if(el)el.innerHTML='✅ 最後更新：'+new Date().toLocaleTimeString()+' <button class="btn btn-secondary btn-sm" onclick="fetchGSheet()" style="margin-left:8px;padding:3px 10px">🔄 重新整理</button>';
-    renderGSheet();
-    // 同步更新儀表板和其他頁面
-    renderDashboard();
-    renderSuppliers();
-    renderOrders();
-    renderAlerts();
+    processNewData(newData,el);
   }).catch(e=>{if(el)el.textContent='❌ 載入失敗：'+e.message});
+}
+
+function processNewData(newData,el){
+  // 檢查資料數量是否異常減少
+  const prevCount=gsData.length;
+  const newCount=newData.length;
+  if(prevCount>0&&newCount<prevCount*0.8){
+    const warnEl=document.getElementById("gsDataWarn");
+    if(warnEl)warnEl.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;margin:10px 0;color:var(--red);font-size:12px">⚠️ <b>資料數量異常！</b>上次載入 '+prevCount+' 筆，這次只有 '+newCount+' 筆（減少 '+(prevCount-newCount)+' 筆）。</div>';
+  }else{
+    const warnEl=document.getElementById("gsDataWarn");
+    if(warnEl)warnEl.innerHTML="";
+  }
+  // 偵測變更
+  gsChanges=detectChanges(gsData,newData,gsCols);
+  gsData=newData;
+  // 儲存快照到 localStorage
+  saveSnapshot();
+  if(el)el.innerHTML='✅ 最後更新：'+new Date().toLocaleTimeString()+' <button class="btn btn-secondary btn-sm" onclick="fetchGSheet()" style="margin-left:8px;padding:3px 10px">🔄 重新整理</button>';
+  renderGSheet();
+  // 同步更新儀表板和其他頁面
+  renderDashboard();
+  renderSuppliers();
+  renderOrders();
+  renderAlerts();
 }
 
 /* ==================== 資料變更追蹤 ==================== */
@@ -1570,15 +1629,21 @@ function gsVal(r,name){const i=gsCol(name);return i>=0?(r[i]||"").trim():""}
 function gsPct(r,name){const v=gsVal(r,name);if(!v)return-1;const m=v.match(/(\d+)/);return m?parseInt(m[1]):-1}
 
 function gsOverallStatus(r){
-  const oqc=gsPct(r,"Supplier OQC %");
   const grn=gsVal(r,"Buyer GRN Date");
-  if(grn)return"done";
-  if(oqc===100){const etd=gsVal(r,"Supplier Estimated ETD date");return etd?"shipped":"oqc_done"}
-  if(oqc>0&&oqc<100)return"in_progress";
-  const asm=gsPct(r,"Supplier Assembling %");
-  if(asm>0)return"in_progress";
+  if(grn&&grn!=="#N/A"&&grn!=="#REF!")return"done";
+  // 新格式沒有百分比欄位，改用 GAP 和日期判斷
   const gap=parseInt(gsVal(r,"Auto GAP"));
-  if(gap<0)return"delayed";
+  const drawingDate=gsVal(r,"Supplier Drawing disassembly Start -End Date");
+  const latestETA=gsVal(r,"MPM ETA Target");
+  // 有 GRN = 已完成
+  if(grn)return"done";
+  // GAP < -3 = 嚴重延遲
+  if(!isNaN(gap)&&gap<-3&&Math.abs(gap)<=365)return"delayed";
+  // 有 Drawing Date 或 Latest ETA = 進行中
+  if(drawingDate||latestETA)return"in_progress";
+  // 有 KO Date = 待處理
+  const ko=gsVal(r,"MPM Customer KO Date");
+  if(ko)return"pending";
   return"pending";
 }
 
@@ -1598,8 +1663,8 @@ function renderGSheet(){
   if(!gsData.length)return;
   // Summary cards
   const total=gsData.length;
-  const totalQty=gsData.reduce((s,r)=>s+(parseInt(gsVal(r,"MPM/MC Demand Qty"))||0),0);
-  const delayed=gsData.filter(r=>{const g=parseInt(gsVal(r,"Auto GAP"));return g<0}).length;
+  const totalQty=gsData.reduce((s,r)=>s+(parseInt(gsVal(r,"KO QTY"))||0),0);
+  const delayed=gsData.filter(r=>{const g=parseInt(gsVal(r,"Auto GAP"));return !isNaN(g)&&g<0&&Math.abs(g)<=365}).length;
   const shipped=gsData.filter(r=>gsOverallStatus(r)==="shipped"||gsOverallStatus(r)==="done").length;
   const inProg=gsData.filter(r=>gsOverallStatus(r)==="in_progress").length;
   const pending=gsData.filter(r=>gsOverallStatus(r)==="pending").length;
@@ -1638,18 +1703,8 @@ function renderGSheetTable(){
     {name:"MPM Supplier",label:"Supplier"},
     {name:"MPM Customer KO Date",label:"KO Date"},
     {name:"MPM ETA Target",label:"ETA Target"},
-    {name:"Auto/Manual\nBuyer Revised ETA/Actual ETA",label:"Revised ETA"},
     {name:"Auto GAP",label:"GAP"},
-    {name:"MPM/MC Demand Qty",label:"Qty"},
-    {name:"Supplier Drawing disassembly %",label:"Draw %"},
-    {name:"Supplier Raw Material %",label:"RM %"},
-    {name:"Supplier STD Part purchase %",label:"STD %"},
-    {name:"Supplier Machining %",label:"Mach %"},
-    {name:"Supplier Surface Treatment %",label:"Surf %"},
-    {name:"Supplier Assembling %",label:"Asm %"},
-    {name:"Supplier OQC %",label:"OQC %"},
-    {name:"Supplier Estimated ETD date",label:"ETD"},
-    {name:"Buyer Flight/BOE Status",label:"Flight"},
+    {name:"KO QTY",label:"Qty"},
     {name:"Buyer GRN Date",label:"GRN"},
     {name:"_status",label:"Status"}
   ];
@@ -1660,16 +1715,12 @@ function renderGSheetTable(){
     h+='<tr>';
     cols.forEach(c=>{
       if(c.name==="_status"){h+='<td>'+gsStatusTag(gsOverallStatus(r))+'</td>'}
-      else if(c.name==="Supplier Drawing disassembly %"||c.name==="Supplier Raw Material %"||c.name==="Supplier STD Part purchase %"||c.name==="Supplier Machining %"||c.name==="Supplier Surface Treatment %"||c.name==="Supplier Assembling %"||c.name==="Supplier OQC %"){
-        h+='<td>'+msBar(gsPct(r,c.name))+'</td>';
-      }else if(c.name==="Auto GAP"){
+      else if(c.name==="Auto GAP"){
         const v=gsVal(r,c.name);const n=parseInt(v);
-        h+='<td style="color:'+(n<0?"var(--red)":n>0?"var(--green)":"inherit")+';font-weight:'+(n!==0?"700":"400")+'">'+(v||"—")+'</td>';
-      }else if(c.name==="Buyer Flight/BOE Status"){
-        const v=gsVal(r,c.name);
-        h+='<td>'+(v?'<span class="gs-tag blue">'+esc(v)+'</span>':'—')+'</td>';
+        h+='<td style="color:'+(n<0?"var(--red)":n>0?"var(--green)":"inherit")+';font-weight:'+(n!==0?"700":"400")+'">'+(v&&v!=="#N/A"&&v!=="#REF!"?v:"—")+'</td>';
       }else{
-        h+='<td>'+esc(gsVal(r,c.name)||"—")+'</td>';
+        const v=gsVal(r,c.name);
+        h+='<td>'+esc((v&&v!=="#N/A"&&v!=="#REF!"?v:"—"))+'</td>';
       }
     });
     h+='</tr>';
@@ -1819,14 +1870,14 @@ function renderDashCFT(){
   if(!gsData.length){document.getElementById("dashCFT").innerHTML='<div class="empty">等待 Google Sheet 資料載入...</div>';return}
   // 定義階段檢查函數（從 OPM → Buyer 順序）
   cftStages=[
-    {name:"OPM",check:r=>gsVal(r,"MPM Customer KO Date")!==""},
-    {name:"RD",check:r=>gsVal(r,"Supplier Drawing disassembly %")!==""},
-    {name:"Sourcing",check:r=>gsVal(r,"Supplier RM purchase Start -End Date")!==""},
-    {name:"Quotation",check:r=>gsVal(r,"Supplier STD part purchase Start -End Date")!==""},
-    {name:"Supplier",check:r=>gsPct(r,"Supplier Machining %")>0},
-    {name:"QA",check:r=>gsPct(r,"Supplier OQC %")>0},
-    {name:"Logistics",check:r=>gsVal(r,"Supplier Estimated ETD date")!==""},
-    {name:"Buyer",check:r=>gsVal(r,"Buyer GRN Date")!==""}
+    {name:"OPM",check:r=>gsVal(r,"MPM Customer KO Date")!==""&&gsVal(r,"MPM Customer KO Date")!=="#N/A"},
+    {name:"RD",check:r=>gsVal(r,"Supplier Drawing disassembly Start -End Date")!==""},
+    {name:"Sourcing",check:r=>gsVal(r,"MPM Supplier")!==""&&gsVal(r,"MPM Supplier")!=="#N/A"},
+    {name:"Quotation",check:r=>gsVal(r,"MPM ETA Target")!==""},
+    {name:"Supplier",check:r=>{const g=parseInt(gsVal(r,"Auto GAP"));return !isNaN(g)}},
+    {name:"QA",check:r=>gsVal(r,"Supplier Drawing disassembly Start -End Date")!==""},
+    {name:"Logistics",check:r=>gsVal(r,"MPM ETA Target")!==""},
+    {name:"Buyer",check:r=>{const grn=gsVal(r,"Buyer GRN Date");return grn!==""&&grn!=="#N/A"&&grn!=="#REF!"}}
   ];
   // 每筆訂單只算在「第一關沒有資料的階段」= 卡關點
   const stageCounts=cftStages.map(()=>0);
@@ -2198,17 +2249,11 @@ function renderDashGSAlerts(){
     const sup=gsVal(r,"MPM Supplier");
     const phase=gsVal(r,"MPM 階段\nProject Phase");
     const level=gsVal(r,"Auto Fixture Level");
-    if(!ko)issues.push({type:"missing",msg:"缺少 KO Date",spec,row:i+1});
-    if(!sup||sup==="#N/A")issues.push({type:"missing",msg:"缺少 Supplier",spec,row:i+1});
+    if(!ko||ko==="#N/A")issues.push({type:"missing",msg:"缺少 KO Date",spec,row:i+1});
+    if(!sup||sup==="#N/A"||sup==="#REF!")issues.push({type:"missing",msg:"缺少 Supplier",spec,row:i+1});
     if(!phase)issues.push({type:"missing",msg:"缺少 Phase",spec,row:i+1});
-    if(!level)issues.push({type:"missing",msg:"缺少 Level",spec,row:i+1});
     const gap=parseInt(gsVal(r,"Auto GAP"));
     if(!isNaN(gap)&&gap<-7)issues.push({type:"delayed",msg:"GAP = "+gap+" 天 (嚴重延遲)",spec,row:i+1});
-    const oqc=gsPct(r,"Supplier OQC %");
-    if(oqc>=0&&oqc<100){
-      const asm=gsPct(r,"Supplier Assembling %");
-      if(asm===100&&oqc<50)issues.push({type:"stuck",msg:"組裝完成但 OQC 進度低 ("+oqc+"%)",spec,row:i+1});
-    }
   });
   if(!issues.length){document.getElementById("dashGSIssues").innerHTML='<div style="color:var(--green);padding:8px">✅ Google Sheet 資料品質良好</div>';return}
   const byType={missing:issues.filter(x=>x.type==="missing"),delayed:issues.filter(x=>x.type==="delayed"),stuck:issues.filter(x=>x.type==="stuck")};
