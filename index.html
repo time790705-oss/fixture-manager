@@ -2113,8 +2113,10 @@ function renderDashDueSoon(){
   const curYear=now.getFullYear();
   const soon=[],overdue=[];
   gsData.forEach((r,i)=>{
-    const eta=gsVal(r,"MPM ETA Target");
-    if(!eta)return;
+    // 優先使用 Latest ETA，若為空或錯誤則用 Target Date
+    let eta=gsVal(r,"MPM ETA Target");
+    if(!eta||eta==="#N/A"||eta==="#REF!")eta=gsVal(r,"MPM Customer Target Date");
+    if(!eta||eta==="#N/A"||eta==="#REF!")return;
     // 排除已完成（有 GRN）的訂單
     const grn=gsVal(r,"Buyer GRN Date");
     if(grn&&grn!=="#N/A"&&grn!=="#REF!")return;
