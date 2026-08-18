@@ -1478,20 +1478,15 @@ function fetchGSheet(){
     const isNewFormat=!firstRow.includes("mpm/opm spec")&&!firstRow.includes("mpm supplier");
     if(isNewFormat){
       // 新格式：前幾列是摘要資料，真正的欄位標題在後面
-      // 尋找真正的欄位標題列：必須同時包含 "Phase" 和 "Spec" 和 "KO Date"
+      // 尋找真正的欄位標題列：第一欄必須是 "Phase"，且包含 "Spec" 和 "KO Date"
       let headerIdx=-1;
-      for(let i=0;i<Math.min(rows.length,60);i++){
-        const rowCells=rows[i].map(c=>(c||"").trim().toLowerCase());
-        const hasPhase=rowCells.some(c=>c==="phase"||c.includes("phase"));
-        const hasSpec=rowCells.some(c=>c==="spec"||c==="spec/model"||c.includes("spec/model"));
-        const hasKODate=rowCells.some(c=>c.includes("ko date")||c==="ko date");
-        if(hasPhase&&hasSpec&&hasKODate){headerIdx=i;break}
-      }
-      if(headerIdx<0){
-        // 備用：找包含 "Spec" 且第一欄為 "Phase" 的列
-        for(let i=0;i<Math.min(rows.length,60);i++){
-          const firstCell=(rows[i][0]||"").trim().toLowerCase();
-          if(firstCell==="phase"&&rows[i].some(c=>c&&c.toLowerCase().includes("spec"))){headerIdx=i;break}
+      for(let i=0;i<Math.min(rows.length,80);i++){
+        const firstCell=(rows[i][0]||"").trim();
+        const rowStr=rows[i].join(" ").toLowerCase();
+        // 第一欄為 "Phase"（大小寫不敏感），且整列包含 "Spec" 和 "KO Date"
+        if(firstCell.toLowerCase()==="phase"&&rowStr.includes("spec")&&rowStr.includes("ko date")){
+          headerIdx=i;
+          break;
         }
       }
       if(headerIdx>0){
@@ -1519,11 +1514,23 @@ function fetchGSheet(){
           "Supplier Drawing Received Date":"Supplier Drawing disassembly Start -End Date",
           "Suppier Drawing Received Date":"Supplier Drawing disassembly Start -End Date"
         };
-        // 重新命名欄位
+        // 重新命名欄位（使用模糊匹配）
         gsCols=gsCols.map(c=>{
           const trimmed=(c||"").trim();
-          return colMap[trimmed]||trimmed;
+          // 先嘗試精確匹配
+          if(colMap[trimmed])return colMap[trimmed];
+          // 再嘗試模糊匹配（忽略大小寫和空格）
+          const normalized=trimmed.replace(/[\s\n]/g,'').toLowerCase();
+          for(const[key,val]of Object.entries(colMap)){
+            const keyNorm=key.replace(/[\s\n]/g,'').toLowerCase();
+            if(normalized===keyNorm)return val;
+          }
+          return trimmed;
         });
+        // 除錯日誌
+        console.log("[GS] 偵測到新格式，欄位標題列索引:", headerIdx);
+        console.log("[GS] 欄位名稱:", gsCols.slice(0, 15));
+        console.log("[GS] 資料筆數:", newData.length);
         // 確保欄位數量足夠（填充空欄位）
         while(gsCols.length<53)gsCols.push("");
         // 填充資料列以匹配欄位數量
