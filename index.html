@@ -751,7 +751,7 @@ function renderDashboard(){
   // GS KPIs
   const total=gsData.length;
   const delayed=gsData.filter(r=>{const g=parseInt(gsVal(r,"Auto GAP"));return !isNaN(g)&&g<-3&&Math.abs(g)<=365}).length;
-  const done=gsData.filter(r=>gsVal(r,"Buyer GRN Date")!=="").length;
+  const done=gsData.filter(r=>{const grn=gsVal(r,"Buyer GRN Date");return grn!==""&&grn!=="#N/A"&&grn!=="#REF!"}).length;
   const inProgress=total-done;
   document.getElementById("gsKpis").innerHTML=[
     ["總訂單數",total,"blue","Google Sheet 追蹤中","all"],
@@ -1478,16 +1478,20 @@ function fetchGSheet(){
     const isNewFormat=!firstRow.includes("mpm/opm spec")&&!firstRow.includes("mpm supplier");
     if(isNewFormat){
       // 新格式：前幾列是摘要資料，真正的欄位標題在後面
-      // 尋找包含 "Spec" 和 "KO Date" 的列作為真正的欄位標題
+      // 尋找真正的欄位標題列：必須同時包含 "Phase" 和 "Spec" 和 "KO Date"
       let headerIdx=-1;
-      for(let i=0;i<Math.min(rows.length,50);i++){
-        const rowStr=rows[i].join(" ").toLowerCase();
-        if(rowStr.includes("spec")&&rowStr.includes("ko date")){headerIdx=i;break}
+      for(let i=0;i<Math.min(rows.length,60);i++){
+        const rowCells=rows[i].map(c=>(c||"").trim().toLowerCase());
+        const hasPhase=rowCells.some(c=>c==="phase"||c.includes("phase"));
+        const hasSpec=rowCells.some(c=>c==="spec"||c==="spec/model"||c.includes("spec/model"));
+        const hasKODate=rowCells.some(c=>c.includes("ko date")||c==="ko date");
+        if(hasPhase&&hasSpec&&hasKODate){headerIdx=i;break}
       }
       if(headerIdx<0){
-        // 找不到真正的欄位標題，嘗試找包含 "Spec" 的列
-        for(let i=0;i<Math.min(rows.length,50);i++){
-          if(rows[i].some(c=>c&&c.toLowerCase().includes("spec"))){headerIdx=i;break}
+        // 備用：找包含 "Spec" 且第一欄為 "Phase" 的列
+        for(let i=0;i<Math.min(rows.length,60);i++){
+          const firstCell=(rows[i][0]||"").trim().toLowerCase();
+          if(firstCell==="phase"&&rows[i].some(c=>c&&c.toLowerCase().includes("spec"))){headerIdx=i;break}
         }
       }
       if(headerIdx>0){
@@ -1500,6 +1504,7 @@ function fetchGSheet(){
           "KO Date":"MPM Customer KO Date",
           "Target Date":"MPM ETA Target",
           "Fixture Manufacturer 治具廠":"MPM Supplier",
+          "Fixture Manufacturer \n治具廠":"MPM Supplier",
           "Spec":"MPM/OPM Spec",
           "Spec/model":"MPM/OPM Spec",
           "Manufacturer-Supplier":"MPM Supplier",
@@ -1508,7 +1513,11 @@ function fetchGSheet(){
           "Gap":"Auto GAP",
           "Project":"MPM Project",
           "Fixture":"Fixture",
-          "Level":"Auto Fixture Level"
+          "Level":"Auto Fixture Level",
+          "KO QTY":"KO QTY",
+          "KO\nQTY":"KO QTY",
+          "Supplier Drawing Received Date":"Supplier Drawing disassembly Start -End Date",
+          "Suppier Drawing Received Date":"Supplier Drawing disassembly Start -End Date"
         };
         // 重新命名欄位
         gsCols=gsCols.map(c=>{
