@@ -385,7 +385,7 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <div class="card" style="margin-top:12px"><h3>🔴 GAP 警示排行（延遲最嚴重）</h3><div id="dashGapRank"></div></div>
 <div class="card" style="margin-top:12px"><h3>⚖️ 交期承諾追蹤（供應商 vs 客戶）</h3><div id="dashETA"></div></div>
 <div class="card" style="margin-top:12px"><h3>📝 近期資料變更</h3><div id="dashChangelog"></div></div>
-<div class="card" style="margin-top:12px"><h3>🔍 資料品質檢查</h3><div id="dashGSIssues"></div></div>
+<div class="card" style="margin-top:12px"><h3>⚠️ 延遲責任摘要</h3><div id="dashDelaySummary"></div></div>
 </div>
 </section>
 
@@ -772,7 +772,7 @@ function renderDashboard(){
   renderDashGapRank();
   renderDashETA();
   renderDashChangelog();
-  renderDashGSAlerts();
+  renderDashDelaySummary();
 }
 function sortTH(label,table,key){const st=table==="order"?orderSort:supplierSort;const arrow=st&&st.key===key?(st.dir>0?" ▲":" ▼"):"";return'<th class="sortable" onclick="sortBy(\''+table+'\',\''+key+'\')">'+label+arrow+'</th>'}
 function sortBy(table,key){const st=table==="order"?orderSort:supplierSort;if(st&&st.key===key){st.dir*=-1}else{const ns={key,dir:1};if(table==="order")orderSort=ns;else supplierSort=ns}if(table==="order")renderOrders();else renderSuppliers()}
@@ -2276,43 +2276,72 @@ function renderDashChangelog(){
 }
 
 /* ==================== 儀表板 Google Sheet 數據品質檢查 ==================== */
-function renderDashGSAlerts(){
+function renderDashDelaySummary(){
   if(!gsData.length)return;
-  const issues=[];
+  const now=new Date();
+  const curYear=now.getFullYear();
+  const parseD=v=>{if(!v||v==="#N/A"||v==="#REF!")return null;const d=parseDate(normDate(v,curYear));return isNaN(d)?null:d};
+  const daysDiff=(a,b)=>Math.floor((a-b)/(1000*60*60*24));
+  
+  const counts={Supplier:0,RD:0,SCM:0,Inspection:0,Stalled:0};
+  const details={Supplier:[],RD:[],SCM:[],Inspection:[],Stalled:[]};
+  
   gsData.forEach((r,i)=>{
     const spec=gsVal(r,"MPM/OPM Spec");
-    const ko=gsVal(r,"MPM Customer KO Date");
     const sup=gsVal(r,"MPM Supplier");
-    const phase=gsVal(r,"MPM 階段\nProject Phase");
-    const level=gsVal(r,"Auto Fixture Level");
-    if(!ko||ko==="#N/A")issues.push({type:"missing",msg:"缺少 KO Date",spec,row:i+1});
-    if(!sup||sup==="#N/A"||sup==="#REF!")issues.push({type:"missing",msg:"缺少 Supplier",spec,row:i+1});
-    if(!phase)issues.push({type:"missing",msg:"缺少 Phase",spec,row:i+1});
-    const gap=parseInt(gsVal(r,"Auto GAP"));
-    if(!isNaN(gap)&&gap<-7)issues.push({type:"delayed",msg:"GAP = "+gap+" 天 (嚴重延遲)",spec,row:i+1});
+    const grn=gsVal(r,"Buyer GRN Date");
+    if(grn&&grn!="#N/A"&&grn!="#REF!")return; // 已完成不計算
+    
+    const delay=detectDelay(r);
+    if(delay){
+      counts[delay]++;
+      if(details[delay].length<5)details[delay].push({spec,sup}); // 每類最多記5筆
+    }
+    
+    // 停滯訂單：KO > 14天且後續欄位全空白
+    const G=parseD(gsVal(r,"MPM Customer KO Date"));
+    const H=gsVal(r,"MPM Supplier KO");
+    const I=gsVal(r,"MPM ETA Target");
+    const R=gsVal(r,"Supplier Drawing disassembly Start -End Date");
+    if(G&&daysDiff(now,G)>14&&(!H||H==="#N/A")&&(!I||I==="#N/A")&&(!R||R==="")){
+      counts.Stalled++;
+      if(details.Stalled.length<5)details.Stalled.push({spec,sup,days:daysDiff(now,G)});
+    }
   });
-  if(!issues.length){document.getElementById("dashGSIssues").innerHTML='<div style="color:var(--green);padding:8px">✅ Google Sheet 資料品質良好</div>';return}
-  const byType={missing:issues.filter(x=>x.type==="missing"),delayed:issues.filter(x=>x.type==="delayed"),stuck:issues.filter(x=>x.type==="stuck")};
-  let h='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">發現 '+issues.length+' 項資料問題：</div>';
-  if(byType.missing.length){
-    h+='<div style="margin-bottom:8px"><span class="gs-tag amber" style="cursor:pointer" onclick="toggleIssueList(\'missing\')">⚠️ 欄位缺失 '+byType.missing.length+' <span id="missingToggle" style="font-size:10px">▼</span></span>';
-    h+='<div id="issueList_missing" style="display:none;margin-top:4px;max-height:200px;overflow-y:auto">'+byType.missing.map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
-  }
-  if(byType.delayed.length){
-    h+='<div style="margin-bottom:8px"><span class="gs-tag red" style="cursor:pointer" onclick="toggleIssueList(\'delayed\')">🔴 嚴重延遲 '+byType.delayed.length+' <span id="delayedToggle" style="font-size:10px">▼</span></span>';
-    h+='<div id="issueList_delayed" style="display:none;margin-top:4px;max-height:200px;overflow-y:auto">'+byType.delayed.map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
-  }
-  if(byType.stuck.length){
-    h+='<div style="margin-bottom:8px"><span class="gs-tag amber" style="cursor:pointer" onclick="toggleIssueList(\'stuck\')">🟡 流程卡關 '+byType.stuck.length+' <span id="stuckToggle" style="font-size:10px">▼</span></span>';
-    h+='<div id="issueList_stuck" style="display:none;margin-top:4px;max-height:200px;overflow-y:auto">'+byType.stuck.map(x=>'<div style="font-size:11px;padding:2px 0">• <b>'+esc(x.spec||"Row "+x.row)+'</b>：'+x.msg+'</div>').join("")+'</div></div>';
-  }
-  document.getElementById("dashGSIssues").innerHTML=h;
-}
-function toggleIssueList(type){
-  const el=document.getElementById("issueList_"+type);
-  const tog=document.getElementById(type+"Toggle");
-  if(el.style.display==="none"){el.style.display="block";tog.textContent="▲"}
-  else{el.style.display="none";tog.textContent="▼"}
+  
+  const items=[
+    {key:"Supplier",label:"供應商延遲",color:"#ef4444",icon:"🔴"},
+    {key:"RD",label:"RD 延遲",color:"#f59e0b",icon:"🟡"},
+    {key:"SCM",label:"SCM 延遲",color:"#f97316",icon:"🟠"},
+    {key:"Inspection",label:"驗機延遲",color:"#3b82f6",icon:"🔵"},
+    {key:"Stalled",label:"停滯訂單（KO>14天無進展）",color:"#6b7280",icon:"⚪"}
+  ];
+  
+  let h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px">';
+  items.forEach(it=>{
+    const c=counts[it.key]||0;
+    h+='<div style="background:'+it.color+'15;border:1px solid '+it.color+'40;border-radius:8px;padding:10px;text-align:center">';
+    h+='<div style="font-size:20px;font-weight:700;color:'+it.color+'">'+c+'</div>';
+    h+='<div style="font-size:11px;color:var(--muted)">'+it.icon+' '+it.label+'</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  
+  // 展開詳情
+  items.forEach(it=>{
+    const list=details[it.key];
+    if(!list.length)return;
+    h+='<details style="margin-bottom:6px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">'+it.icon+' '+it.label+' 詳情 ('+list.length+'筆)</summary>';
+    h+='<div style="padding:4px 0 4px 16px;font-size:11px">';
+    list.forEach(d=>{
+      h+='<div>• <b>'+esc(d.spec||"?")+'</b> ('+esc(d.sup||"?")+')';
+      if(it.key==="Stalled")h+=' — 已停滯 '+d.days+' 天';
+      h+='</div>';
+    });
+    h+='</div></details>';
+  });
+  
+  document.getElementById("dashDelaySummary").innerHTML=h;
 }
 
 /* ==================== 初始化 ==================== */
