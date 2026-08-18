@@ -1512,8 +1512,6 @@ function fetchGSheet(){
           "Fixture Manufacturer \n治具廠":"MPM Supplier",
           "Spec":"MPM/OPM Spec",
           "Spec/model":"MPM/OPM Spec",
-          "Manufacturer-Supplier":"MPM Supplier",
-          "Latest ETA":"MPM ETA Target",
           "GRN Date":"Buyer GRN Date",
           "Gap":"Auto GAP",
           "Project":"MPM Project",
@@ -1537,14 +1535,6 @@ function fetchGSheet(){
           }
           return trimmed;
         });
-        // 除錯日誌
-        console.log("[GS] 偵測到新格式，欄位標題列索引:", headerIdx);
-        console.log("[GS] 原始資料列數:", rows.length, "標題列後剩餘:", rows.slice(headerIdx+1).length);
-        console.log("[GS] 過濾後資料筆數 (rawNewData):", rawNewData.length);
-        console.log("[GS] 欄位名稱:", gsCols.slice(0, 15));
-        if(rawNewData.length > 0) {
-          console.log("[GS] 第一筆資料前5欄:", rawNewData[0].slice(0,5));
-        }
         // 確保欄位數量足夠（填充空欄位）
         while(gsCols.length<53)gsCols.push("");
         // 填充資料列以匹配欄位數量
