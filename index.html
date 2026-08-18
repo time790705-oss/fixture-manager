@@ -2111,32 +2111,57 @@ function renderDashDueSoon(){
   if(!gsData.length){document.getElementById("dashDueSoon").innerHTML='<div class="empty">等待資料...</div>';return}
   const now=new Date();now.setHours(0,0,0,0);
   const curYear=now.getFullYear();
-  const soon=[];
+  const soon=[],overdue=[];
   gsData.forEach((r,i)=>{
     const eta=gsVal(r,"MPM ETA Target");
     if(!eta)return;
+    // 排除已完成（有 GRN）的訂單
+    const grn=gsVal(r,"Buyer GRN Date");
+    if(grn&&grn!=="#N/A"&&grn!=="#REF!")return;
     // 用 normDate 確保年份正確（處理 M/D 格式）
     const etaNorm=normDate(eta,curYear);
     const etaDate=parseDate(etaNorm);
     if(!etaDate)return;
     const days=Math.floor((etaDate-now)/(1000*60*60*24));
-    if(days>=0&&days<=dueDays){
-      soon.push({spec:gsVal(r,"MPM/OPM Spec"),project:gsVal(r,"MPM Project"),supplier:gsVal(r,"MPM Supplier"),eta:eta,days:days,row:i+1});
+    const item={spec:gsVal(r,"MPM/OPM Spec"),project:gsVal(r,"MPM Project"),supplier:gsVal(r,"MPM Supplier"),eta:eta,days:days,row:i+1};
+    if(days<0){
+      overdue.push(item);
+    }else if(days<=dueDays){
+      soon.push(item);
     }
   });
+  overdue.sort((a,b)=>a.days-b.days); // 最逾期的排最前面
   soon.sort((a,b)=>a.days-b.days);
-  if(!soon.length){document.getElementById("dashDueSoon").innerHTML='<div class="empty">'+dueDays+'天內無交期</div>';return}
-  let h='<div style="font-size:12px;color:var(--muted);margin-bottom:6px">共 '+soon.length+' 筆訂單即將到期</div>';
-  h+='<div style="max-height:200px;overflow-y:auto">';
-  soon.forEach(x=>{
-    const color=x.days<=2?"var(--red)":x.days<=4?"var(--amber)":"var(--green)";
-    h+='<div style="padding:6px 0;border-bottom:1px solid var(--line)">';
-    h+='<b>'+esc(x.spec||"—")+'</b> <span style="color:var(--muted)">'+esc(x.project)+'</span><br>';
-    h+='<small style="color:'+color+'">'+x.days+'天後 · '+esc(x.eta)+'</small>';
-    h+=' <span style="font-size:11px;color:var(--muted)">· '+esc(x.supplier)+'</span>';
+  if(!overdue.length&&!soon.length){document.getElementById("dashDueSoon").innerHTML='<div class="empty">'+dueDays+'天內無交期</div>';return}
+  let h='';
+  // 已逾期區塊
+  if(overdue.length){
+    h+='<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 10px;margin-bottom:8px">';
+    h+='<div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:4px">⚠️ 已逾期 '+overdue.length+' 筆</div>';
+    h+='<div style="max-height:160px;overflow-y:auto">';
+    overdue.forEach(x=>{
+      h+='<div style="padding:5px 0;border-bottom:1px solid #fecaca">';
+      h+='<b>'+esc(x.spec||"—")+'</b> <span style="color:var(--muted)">'+esc(x.project)+'</span><br>';
+      h+='<small style="color:var(--red);font-weight:700">逾期 '+Math.abs(x.days)+' 天 · '+esc(x.eta)+'</small>';
+      h+=' <span style="font-size:11px;color:var(--muted)">· '+esc(x.supplier)+'</span>';
+      h+='</div>';
+    });
+    h+='</div></div>';
+  }
+  // 即將到期區塊
+  if(soon.length){
+    h+='<div style="font-size:12px;color:var(--muted);margin-bottom:6px">即將到期 '+soon.length+' 筆</div>';
+    h+='<div style="max-height:160px;overflow-y:auto">';
+    soon.forEach(x=>{
+      const color=x.days<=2?"var(--red)":x.days<=4?"var(--amber)":"var(--green)";
+      h+='<div style="padding:5px 0;border-bottom:1px solid var(--line)">';
+      h+='<b>'+esc(x.spec||"—")+'</b> <span style="color:var(--muted)">'+esc(x.project)+'</span><br>';
+      h+='<small style="color:'+color+'">'+x.days+'天後 · '+esc(x.eta)+'</small>';
+      h+=' <span style="font-size:11px;color:var(--muted)">· '+esc(x.supplier)+'</span>';
+      h+='</div>';
+    });
     h+='</div>';
-  });
-  h+='</div>';
+  }
   document.getElementById("dashDueSoon").innerHTML=h;
 }
 
