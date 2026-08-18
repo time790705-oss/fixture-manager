@@ -1466,91 +1466,55 @@ let gsFilterProject="",gsFilterSupplier="",gsFilterPhase="",gsFilterStatus="",gs
 let gsChanges=[]; // 儲存偵測到的變更
 
 function fetchGSheet(){
-  // 使用 /export API 讀取所有資料（包含隱藏列，不受篩選器影響）
-  const url="https://docs.google.com/spreadsheets/d/"+GS_ID+"/export?format=csv&sheet="+GS_SHEET;
+  // 改用 gviz CSV API 讀取完整 53 欄（包含所有欄位，不受隱藏列影響）
+  const url="https://docs.google.com/spreadsheets/d/"+GS_ID+"/gviz/tq?tqx=out:csv&sheet="+GS_SHEET;
   const el=document.getElementById("gsRefresh");
   if(el)el.innerHTML='⏳ 載入中...';
   return fetch(url).then(r=>r.text()).then(csv=>{
     let rows=parseCSV(csv);
     if(rows.length<2){if(el)el.textContent='❗ 無資料';return}
-    // 偵測新格式：如果第一列不包含预期的欄位名稱，表示 Google Sheet 結構已改變
-    const firstRow=rows[0].join(" ").toLowerCase();
-    const isNewFormat=!firstRow.includes("mpm/opm spec")&&!firstRow.includes("mpm supplier");
-    if(isNewFormat){
-      // 新格式：前幾列是摘要資料，真正的欄位標題在後面
-      // 策略：找第一個「第一欄為 Phase 且包含 Spec 和 KO Date」的列
-      // 同時排除資料列（資料列的第一欄會是 FRB/OPM/RD 等實際階段值或型號）
-      let headerIdx=-1;
-      for(let i=0;i<Math.min(rows.length,80);i++){
-        const firstCell=(rows[i][0]||"").trim();
-        const rowStr=rows[i].join(" ").toLowerCase();
-        // 檢查條件：
-        // 1. 第一欄為 "phase"（不區分大小寫）
-        // 2. 整列包含 "spec" 和 "ko date"
-        // 3. 第一欄不是型號（如 TAN-3062HOD-B00）
-        // 4. 第一欄不是常見階段值（FRB, OPM, RD, Sourcing, Quotation, Supplier, QA, Logistics, Buyer）
-        const isPhaseHeader=firstCell.toLowerCase()==="phase";
-        const hasSpec=rowStr.includes("spec");
-        const hasKODate=rowStr.includes("ko date");
-        const notPartNumber=!/[A-Z]{2,}-\d/.test(firstCell);
-        const notStageValue=!/^(frb|opm|rd|sourcing|quotation|supplier|qa|logistics|buyer)$/i.test(firstCell);
-        if(isPhaseHeader&&hasSpec&&hasKODate&&notPartNumber&&notStageValue){
-          headerIdx=i;
-          break;
-        }
-      }
-      if(headerIdx>0){
-        // 使用找到的列作為欄位標題，資料從下一列開始
-        gsCols=rows[headerIdx];
-        const rawNewData=rows.slice(headerIdx+1).filter(r=>r.some(c=>c&&c.trim()));
-        // 新舊欄位名稱映射（新名稱 → 舊名稱，讓其餘程式碼不用改）
-        const colMap={
-          "Phase":"MPM 階段\nProject Phase",
-          "KO Date":"MPM Customer KO Date",
-          "Latest ETA":"MPM ETA Target",
-          "Target Date":"MPM Customer Target Date",
-          "Fixture Manufacturer 治具廠":"MPM Supplier",
-          "Fixture Manufacturer \n治具廠":"MPM Supplier",
-          "Spec":"MPM/OPM Spec",
-          "Spec/model":"MPM/OPM Spec",
-          "GRN Date":"Buyer GRN Date",
-          "Gap":"Auto GAP",
-          "Project":"MPM Project",
-          "Fixture":"Fixture",
-          "Level":"Auto Fixture Level",
-          "KO QTY":"KO QTY",
-          "KO\nQTY":"KO QTY",
-          "Supplier Drawing Received Date":"Supplier Drawing disassembly Start -End Date",
-          "Suppier Drawing Received Date":"Supplier Drawing disassembly Start -End Date"
-        };
-        // 重新命名欄位（使用模糊匹配）
-        gsCols=gsCols.map(c=>{
-          const trimmed=(c||"").trim();
-          // 先嘗試精確匹配
-          if(colMap[trimmed])return colMap[trimmed];
-          // 再嘗試模糊匹配（忽略大小寫和空格）
-          const normalized=trimmed.replace(/[\s\n]/g,'').toLowerCase();
-          for(const[key,val]of Object.entries(colMap)){
-            const keyNorm=key.replace(/[\s\n]/g,'').toLowerCase();
-            if(normalized===keyNorm)return val;
-          }
-          return trimmed;
-        });
-        // 確保欄位數量足夠（填充空欄位）
-        while(gsCols.length<53)gsCols.push("");
-        // 填充資料列以匹配欄位數量
-        const newData=rawNewData.map(r=>{
-          const padded=r.slice();
-          while(padded.length<gsCols.length)padded.push("");
-          return padded;
-        });
-        processNewData(newData,el);
-        return;
-      }
-    }
-    // 舊格式處理
+    // gviz CSV 第一列就是完整欄位標題（53 欄）
     gsCols=rows[0];
-    const newData=rows.slice(1).filter(r=>r.some(c=>c.trim()));
+    const rawData=rows.slice(1).filter(r=>r.some(c=>c&&c.trim()));
+    // 欄位名稱映射：gviz 實際欄位名 → 內部使用的名稱
+    const colMap={
+      "z MPM 階段\nProject Phase":"MPM 階段\nProject Phase",
+      "z MPM 階段 Project Phase":"MPM 階段\nProject Phase",
+      "L1/L2 +19d(ETA MAA)，L3&L4 +22d(ETA MAA)\n  MPM Customer KO Date":"MPM Customer KO Date",
+      "L1/L2 +19d(ETA MAA)，L3&L4 +22d(ETA MAA) MPM Customer KO Date":"MPM Customer KO Date",
+      "MPM Supplier KO ":"MPM Supplier KO",
+      "MPM Supplier KO":"MPM Supplier KO",
+      "Auto Suppier Drawing Received Date":"Supplier Drawing disassembly Start -End Date",
+      "Supplier Drawing disassembly on schedule\n(Y/N)":"Supplier Drawing disassembly on schedule (Y/N)",
+      "Supplier Raw Material On schedule \n(Y/N)":"Supplier Raw Material On schedule (Y/N)",
+      "Supplier STD Part On schedule (Y/N)":"Supplier STD Part On schedule (Y/N)",
+      "Supplier Machining On schedule\n(Y/N)":"Supplier Machining On schedule (Y/N)",
+      "Supplier Surface Treatment On schedule\n(Y/N)":"Supplier Surface Treatment On schedule (Y/N)",
+      "Supplier assembling On schedule \n(Y/N)":"Supplier assembling On schedule (Y/N)",
+      "Supplier OQC On schedule \n(Y/N)":"Supplier OQC On schedule (Y/N)",
+      "Auto/Manual\nBuyer Revised ETD Date":"Buyer Revised ETD Date",
+      "Auto/Manual\nBuyer Revised ETA/Actual ETA":"Buyer Revised ETA",
+      " ShenCai Inspection Actual Date":"ShenCai Inspection Actual Date",
+      " ShenCai 驗機確認Remark":"ShenCai 驗機確認Remark",
+      "yet to reached, Actual ETD + 7 days // Actual Flight +4days - Direct Flight, +4days+transit days Auto GAP":"Auto GAP"
+    };
+    // 重新命名欄位
+    gsCols=gsCols.map(c=>{
+      const trimmed=(c||"").trim();
+      if(colMap[trimmed])return colMap[trimmed];
+      const normalized=trimmed.replace(/[\s\n]/g,'').toLowerCase();
+      for(const[key,val]of Object.entries(colMap)){
+        const keyNorm=key.replace(/[\s\n]/g,'').toLowerCase();
+        if(normalized===keyNorm)return val;
+      }
+      return trimmed;
+    });
+    // 填充資料列
+    const newData=rawData.map(r=>{
+      const padded=r.slice();
+      while(padded.length<gsCols.length)padded.push("");
+      return padded;
+    });
     processNewData(newData,el);
   }).catch(e=>{if(el)el.textContent='❌ 載入失敗：'+e.message});
 }
@@ -1666,6 +1630,56 @@ function gsOverallStatus(r){
   const ko=gsVal(r,"MPM Customer KO Date");
   if(ko)return"pending";
   return"pending";
+}
+
+// 延遲偵測規則：回傳延遲責任歸屬
+function detectDelay(r){
+  const now=new Date();
+  const curYear=now.getFullYear();
+  // 輔助函數：解析日期
+  const parseD=v=>{if(!v||v==="#N/A"||v==="#REF!")return null;const d=parseDate(normDate(v,curYear));return isNaN(d)?null:d};
+  // 輔助函數：日期差距天數
+  const daysDiff=(a,b)=>Math.floor((a-b)/(1000*60*60*24));
+  
+  const grn=gsVal(r,"Buyer GRN Date");
+  if(grn&&grn!=="#N/A"&&grn!=="#REF!")return null; // 已完成不計算
+  
+  const G=parseD(gsVal(r,"MPM Customer KO Date")); // G: MPM KO Date
+  const H=parseD(gsVal(r,"MPM Supplier KO")); // H: MPM Supplier KO
+  const I=parseD(gsVal(r,"MPM ETA Target")); // I: MPM ETA Target
+  const N=parseD(gsVal(r,"Auto Estimated ETA")); // N: Auto Estimated ETA
+  const R=parseD(gsVal(r,"Supplier Drawing disassembly Start -End Date")); // R: Drawing Received Date
+  const AN=parseD(gsVal(r,"Supplier Estimated ETD date")); // AN: Supplier Estimated ETD
+  const AO=parseD(gsVal(r,"Buyer Revised ETD Date")); // AO: Buyer Revised ETD
+  const AR=parseD(gsVal(r,"Supplier Flight Date")); // AR: Supplier Flight Date
+  const AS=gsVal(r,"Supplier Flight Tracking Number"); // AS: Flight Tracking Number
+  const AT=gsVal(r,"Buyer Flight/BOE Status"); // AT: Flight/BOE Status
+  const AW=parseD(gsVal(r,"ShenCai Inspection Actual Date")); // AW: Inspection Actual Date
+  const AY=gsVal(r,"Supplier Inspection Location"); // AY: Inspection Location
+  
+  // 規則 2: RD Delay - H 有日期，R 空白或 R > H
+  if(H&&(!R||R>H))return"RD";
+  
+  // 規則 3: SCM Delay
+  // 3a: G 有日期，H 空白或 H > G+3
+  if(G&&(!H||daysDiff(H,G)>3))return"SCM";
+  // 3b: AR 空白，且現在 > AO+3
+  if(!AR&&AO&&daysDiff(now,AO)>3)return"SCM";
+  // 3c: AT 在 AR+4 天內未變成 "Reached TNES"
+  if(AR&&daysDiff(now,AR)<=4&&!AT.includes("Reached TNES")&&!AT.includes("Landed")&&!AT.includes("In Transit"))return"SCM";
+  
+  // 規則 5: 供應商 Delay
+  // 5a: N > I (Auto Estimated ETA 晚於 MPM ETA Target)
+  if(N&&I&&daysDiff(N,I)>0)return"Supplier";
+  // 5b: AO > AN (Buyer Revised ETD 晚於 Supplier Estimated ETD)
+  if(AO&&AN&&daysDiff(AO,AN)>0)return"Supplier";
+  // 5c: AW > AO (實際驗機日期晚於 Buyer Revised ETD)
+  if(AW&&AO&&daysDiff(AW,AO)>0)return"Supplier";
+  
+  // 規則 6: 驗機 Delay (僅 AY = "Supplier/China" 才計算)
+  if(AY&&AY.includes("Supplier/China")&&!AW&&AO&&daysDiff(now,AO)>3)return"Inspection";
+  
+  return null; // 無延遲
 }
 
 function gsStatusTag(status){
@@ -1889,16 +1903,13 @@ function showDashKpiDetail(type){
 let cftStages=[];
 function renderDashCFT(){
   if(!gsData.length){document.getElementById("dashCFT").innerHTML='<div class="empty">等待 Google Sheet 資料載入...</div>';return}
-  // 定義階段檢查函數（從 OPM → Buyer 順序）
+  // 定義階段檢查函數（從 OPM → QA 順序，移除 Buyer/Logistics，Quotation 合併到 Supplier）
   cftStages=[
     {name:"OPM",check:r=>gsVal(r,"MPM Customer KO Date")!==""&&gsVal(r,"MPM Customer KO Date")!=="#N/A"},
     {name:"RD",check:r=>gsVal(r,"Supplier Drawing disassembly Start -End Date")!==""},
-    {name:"Sourcing",check:r=>gsVal(r,"MPM Supplier")!==""&&gsVal(r,"MPM Supplier")!=="#N/A"},
-    {name:"Quotation",check:r=>gsVal(r,"MPM ETA Target")!==""},
-    {name:"Supplier",check:r=>{const g=parseInt(gsVal(r,"Auto GAP"));return !isNaN(g)}},
-    {name:"QA",check:r=>gsVal(r,"Supplier Drawing disassembly Start -End Date")!==""},
-    {name:"Logistics",check:r=>gsVal(r,"MPM ETA Target")!==""},
-    {name:"Buyer",check:r=>{const grn=gsVal(r,"Buyer GRN Date");return grn!==""&&grn!=="#N/A"&&grn!=="#REF!"}}
+    {name:"Sourcing",check:r=>gsVal(r,"MPM Supplier KO")!==""&&gsVal(r,"MPM Supplier KO")!=="#N/A"},
+    {name:"Supplier",check:r=>gsVal(r,"MPM ETA Target")!==""},
+    {name:"QA",check:r=>gsVal(r,"Supplier Drawing disassembly %")!==""&&gsVal(r,"Supplier Drawing disassembly %")!=="0%"}
   ];
   // 每筆訂單只算在「第一關沒有資料的階段」= 卡關點
   const stageCounts=cftStages.map(()=>0);
@@ -1938,7 +1949,7 @@ function showCFTDetail(idx){
   const orderIdxs=window.cftStageOrders[idx]||[];
   const el=document.getElementById("cftDetail");
   if(!orderIdxs.length){el.innerHTML='<div class="empty">此階段無卡關訂單</div>';return}
-  // 每個階段顯示不同的欄位
+  // 每個階段顯示不同的欄位（配合新的 5 階段：OPM, RD, Sourcing, Supplier, QA）
   const stageCols=[
     {name:"OPM",cols:[
       {h:"Spec",v:r=>gsVal(r,"MPM/OPM Spec")},
@@ -1958,14 +1969,7 @@ function showCFTDetail(idx){
     {name:"Sourcing",cols:[
       {h:"Spec",v:r=>gsVal(r,"MPM/OPM Spec")},
       {h:"Supplier",v:r=>gsVal(r,"MPM Supplier")},
-      {h:"RM Purchase Date",v:r=>gsVal(r,"Supplier RM purchase Start -End Date")},
-      {h:"Drawing %",v:r=>gsVal(r,"Supplier Drawing disassembly %")},
-      {h:"Target ETA",v:r=>gsVal(r,"MPM ETA Target")}
-    ]},
-    {name:"Quotation",cols:[
-      {h:"Spec",v:r=>gsVal(r,"MPM/OPM Spec")},
-      {h:"Supplier",v:r=>gsVal(r,"MPM Supplier")},
-      {h:"STD Part Date",v:r=>gsVal(r,"Supplier STD part purchase Start -End Date")},
+      {h:"Supplier KO",v:r=>gsVal(r,"MPM Supplier KO")},
       {h:"RM Purchase Date",v:r=>gsVal(r,"Supplier RM purchase Start -End Date")},
       {h:"Target ETA",v:r=>gsVal(r,"MPM ETA Target")}
     ]},
@@ -1974,31 +1978,15 @@ function showCFTDetail(idx){
       {h:"Supplier",v:r=>gsVal(r,"MPM Supplier")},
       {h:"Machining %",v:r=>gsVal(r,"Supplier Machining %")},
       {h:"Target ETA",v:r=>gsVal(r,"MPM ETA Target")},
+      {h:"Estimated ETA",v:r=>gsVal(r,"Auto Estimated ETA")},
       {h:"GAP",v:r=>{const g=parseInt(gsVal(r,"Auto GAP"));return isNaN(g)?"—":(g<0?g+"天":"+"+g+"天")}}
     ]},
     {name:"QA",cols:[
       {h:"Spec",v:r=>gsVal(r,"MPM/OPM Spec")},
       {h:"Supplier",v:r=>gsVal(r,"MPM Supplier")},
-      {h:"OQC %",v:r=>gsVal(r,"Supplier OQC %")},
-      {h:"Machining %",v:r=>gsVal(r,"Supplier Machining %")},
-      {h:"Inspection Date",v:r=>gsVal(r,"Supplier Inspection Date")},
-      {h:"Target ETA",v:r=>gsVal(r,"MPM ETA Target")}
-    ]},
-    {name:"Logistics",cols:[
-      {h:"Spec",v:r=>gsVal(r,"MPM/OPM Spec")},
-      {h:"Supplier",v:r=>gsVal(r,"MPM Supplier")},
-      {h:"ETD",v:r=>gsVal(r,"Supplier Estimated ETD date")},
-      {h:"Flight Date",v:r=>gsVal(r,"Flight Date")},
+      {h:"Drawing %",v:r=>gsVal(r,"Supplier Drawing disassembly %")},
       {h:"OQC %",v:r=>gsVal(r,"Supplier OQC %")},
       {h:"Target ETA",v:r=>gsVal(r,"MPM ETA Target")}
-    ]},
-    {name:"Buyer",cols:[
-      {h:"Spec",v:r=>gsVal(r,"MPM/OPM Spec")},
-      {h:"Supplier",v:r=>gsVal(r,"MPM Supplier")},
-      {h:"ETD",v:r=>gsVal(r,"Supplier Estimated ETD date")},
-      {h:"Flight Date",v:r=>gsVal(r,"Flight Date")},
-      {h:"GRN Date",v:r=>gsVal(r,"Buyer GRN Date")},
-      {h:"GAP",v:r=>{const g=parseInt(gsVal(r,"Auto GAP"));return isNaN(g)?"—":(g<0?g+"天":"+"+g+"天")}}
     ]}
   ];
   const cols=stageCols[idx].cols;
