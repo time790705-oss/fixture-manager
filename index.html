@@ -1741,8 +1741,11 @@ function renderGSheetTable(){
     {name:"Auto GAP",label:"GAP"},
     {name:"KO QTY",label:"Qty"},
     {name:"Buyer GRN Date",label:"GRN"},
-    {name:"_status",label:"Status"}
+    {name:"_status",label:"Status"},
+    {name:"_delay",label:"延遲責任"}
   ];
+  const delayColors={Supplier:"#ef4444",RD:"#f59e0b",SCM:"#f97316",Inspection:"#3b82f6"};
+  const delayLabels={Supplier:"🔴 供應商",RD:"🟡 RD",SCM:"🟠 SCM",Inspection:"🔵 驗機"};
   let h='<thead><tr>';
   cols.forEach((c,ci)=>{h+='<th onclick="gsSort('+ci+')">'+c.label+'</th>'});
   h+='</tr></thead><tbody>';
@@ -1750,6 +1753,11 @@ function renderGSheetTable(){
     h+='<tr>';
     cols.forEach(c=>{
       if(c.name==="_status"){h+='<td>'+gsStatusTag(gsOverallStatus(r))+'</td>'}
+      else if(c.name==="_delay"){
+        const d=detectDelay(r);
+        if(d){h+='<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:'+delayColors[d]+'">'+delayLabels[d]+'</span></td>'}
+        else{h+='<td style="color:var(--muted);font-size:11px">—</td>'}
+      }
       else if(c.name==="Auto GAP"){
         const v=gsVal(r,c.name);const n=parseInt(v);
         h+='<td style="color:'+(n<0?"var(--red)":n>0?"var(--green)":"inherit")+';font-weight:'+(n!==0?"700":"400")+'">'+(v&&v!=="#N/A"&&v!=="#REF!"?v:"—")+'</td>';
