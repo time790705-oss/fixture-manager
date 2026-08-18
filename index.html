@@ -1478,13 +1478,23 @@ function fetchGSheet(){
     const isNewFormat=!firstRow.includes("mpm/opm spec")&&!firstRow.includes("mpm supplier");
     if(isNewFormat){
       // 新格式：前幾列是摘要資料，真正的欄位標題在後面
-      // 尋找真正的欄位標題列：第一欄必須是 "Phase"，且包含 "Spec" 和 "KO Date"
+      // 策略：找第一個「第一欄為 Phase 且包含 Spec 和 KO Date」的列
+      // 同時排除資料列（資料列的第一欄會是 FRB/OPM/RD 等實際階段值或型號）
       let headerIdx=-1;
       for(let i=0;i<Math.min(rows.length,80);i++){
         const firstCell=(rows[i][0]||"").trim();
         const rowStr=rows[i].join(" ").toLowerCase();
-        // 第一欄為 "Phase"（大小寫不敏感），且整列包含 "Spec" 和 "KO Date"
-        if(firstCell.toLowerCase()==="phase"&&rowStr.includes("spec")&&rowStr.includes("ko date")){
+        // 檢查條件：
+        // 1. 第一欄為 "phase"（不區分大小寫）
+        // 2. 整列包含 "spec" 和 "ko date"
+        // 3. 第一欄不是型號（如 TAN-3062HOD-B00）
+        // 4. 第一欄不是常見階段值（FRB, OPM, RD, Sourcing, Quotation, Supplier, QA, Logistics, Buyer）
+        const isPhaseHeader=firstCell.toLowerCase()==="phase";
+        const hasSpec=rowStr.includes("spec");
+        const hasKODate=rowStr.includes("ko date");
+        const notPartNumber=!/[A-Z]{2,}-\d/.test(firstCell);
+        const notStageValue=!/^(frb|opm|rd|sourcing|quotation|supplier|qa|logistics|buyer)$/i.test(firstCell);
+        if(isPhaseHeader&&hasSpec&&hasKODate&&notPartNumber&&notStageValue){
           headerIdx=i;
           break;
         }
@@ -1529,8 +1539,12 @@ function fetchGSheet(){
         });
         // 除錯日誌
         console.log("[GS] 偵測到新格式，欄位標題列索引:", headerIdx);
+        console.log("[GS] 原始資料列數:", rows.length, "標題列後剩餘:", rows.slice(headerIdx+1).length);
+        console.log("[GS] 過濾後資料筆數 (rawNewData):", rawNewData.length);
         console.log("[GS] 欄位名稱:", gsCols.slice(0, 15));
-        console.log("[GS] 資料筆數:", newData.length);
+        if(rawNewData.length > 0) {
+          console.log("[GS] 第一筆資料前5欄:", rawNewData[0].slice(0,5));
+        }
         // 確保欄位數量足夠（填充空欄位）
         while(gsCols.length<53)gsCols.push("");
         // 填充資料列以匹配欄位數量
