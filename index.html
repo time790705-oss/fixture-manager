@@ -2269,7 +2269,7 @@ function renderDashDelaySummary(){
     const delay=detectDelay(r);
     if(delay){
       counts[delay]++;
-      if(details[delay].length<5)details[delay].push({spec,sup}); // 每類最多記5筆
+      details[delay].push({spec,sup}); // 記錄全部
     }
     
     // 停滯訂單：KO > 14天且後續欄位全空白
@@ -2279,7 +2279,7 @@ function renderDashDelaySummary(){
     const R=gsVal(r,"Supplier Drawing disassembly Start -End Date");
     if(G&&daysDiff(now,G)>14&&(!H||H==="#N/A")&&(!I||I==="#N/A")&&(!R||R==="")){
       counts.Stalled++;
-      if(details.Stalled.length<5)details.Stalled.push({spec,sup,days:daysDiff(now,G)});
+      details.Stalled.push({spec,sup,days:daysDiff(now,G)});
     }
   });
   
@@ -2306,7 +2306,7 @@ function renderDashDelaySummary(){
     const list=details[it.key];
     if(!list.length)return;
     h+='<details style="margin-bottom:6px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">'+it.icon+' '+it.label+' 詳情 ('+list.length+'筆)</summary>';
-    h+='<div style="padding:4px 0 4px 16px;font-size:11px">';
+    h+='<div style="padding:4px 0 4px 16px;font-size:11px;max-height:200px;overflow-y:auto">';
     list.forEach(d=>{
       h+='<div>• <b>'+esc(d.spec||"?")+'</b> ('+esc(d.sup||"?")+')';
       if(it.key==="Stalled")h+=' — 已停滯 '+d.days+' 天';
