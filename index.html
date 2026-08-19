@@ -411,7 +411,12 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <option value="OPM">🟠 等待 Supplier KO</option>
 <option value="RD">🟡 等待圖紙</option>
 <option value="Sourcing">🟣 等待排 ETA</option>
-<option value="SupplierOverdue">🔴 ETA 超期</option>
+<option value="ETD未確認">🟠 ETD 未確認</option>
+<option value="ETA超期">🔴 ETA 超期</option>
+<option value="等待出貨">🟡 等待出貨</option>
+<option value="等待到達">🔵 等待到達</option>
+<option value="Inspection">🔵 驗機階段</option>
+<option value="GRN">🟣 等待收貨</option>
 </select>
 <select id="alertFilterSupplier" onchange="renderAlerts()">
 <option value="">全部供應商</option>
@@ -865,13 +870,12 @@ function renderAlerts(){
     if(!a.current)return;
     
     const s=a.current.stage;
-    const type=s==="Supplier"&&a.currentDays>0?"SupplierOverdue":s;
-    if(type==="Supplier")return; // 正常生產中不列入異常
+    if(s==="Supplier")return; // 正常生產中不列入異常
     
     const ko=gsVal(r,"MPM Customer KO Date");
     const eta=gsVal(r,"MPM ETA Target");
     const gap=gsVal(r,"Auto GAP");
-    alerts.push({spec,sup,type,current:a.current,days:a.currentDays,ko,eta,gap,history:a.history});
+    alerts.push({spec,sup,type:s,current:a.current,days:a.currentDays,ko,eta,gap,history:a.history});
   });
   
   // 篩選
@@ -1719,6 +1723,8 @@ function analyzeProject(r){
   const AN=parseD(gsVal(r,"Supplier Estimated ETD date"));
   const AO=parseD(gsVal(r,"Buyer Revised ETD Date"));
   const AR=parseD(gsVal(r,"Supplier Flight Date"));
+  const AS=gsVal(r,"Supplier Flight Tracking Number");
+  const AT=gsVal(r,"Buyer Flight/BOE Status");
   const AW=parseD(gsVal(r,"ShenCai Inspection Actual Date"));
   const AY=gsVal(r,"Supplier Inspection Location");
   
@@ -1740,51 +1746,118 @@ function analyzeProject(r){
     result.history.push({stage:"Supplier",msg:"Buyer 修改 ETD 比供應商預估晚 "+daysDiff(AO,AN)+" 天",days:daysDiff(AO,AN)});
   
   // === 目前卡關點分析 ===
-  // 卡在哪一關？從 OPM 往下檢查，第一個未完成的階段
-  if(!G){
-    // 連 KO 都沒有 → 尚未啟動
-    return result;
-  }
+  if(!G) return result; // 尚未啟動
   
+  // 1. OPM 階段：有 KO 但沒有 Supplier KO
   if(!H){
-    // 有 Customer KO 但沒有 Supplier KO → 卡在 OPM
     const days=daysDiff(now,G);
-    if(days>3)result.current={stage:"OPM",label:"等待發 Supplier KO",color:"#f97316",icon:"🟠"};
+    if(days>3)result.current={stage:"OPM",label:"等待發 Supplier KO（"+days+"天）",color:"#f97316",icon:"🟠"};
     result.currentDays=days;
     return result;
   }
   
-  if(!R){
-    // 有 Supplier KO 但沒有 Drawing → 卡在 RD
+  // 2. RD 階段：有 Supplier KO 但 Drawing 空白或 R > H
+  if(!R||R>H){
     const days=daysDiff(now,H);
     result.current={stage:"RD",label:"等待圖紙（KO 已 "+days+" 天）",color:"#f59e0b",icon:"🟡"};
     result.currentDays=days;
     return result;
   }
   
+  // 3. Sourcing 階段：有 Drawing 但沒有 ETA
   if(!I){
-    // 有 Drawing 但沒有 ETA → 卡在 Sourcing
     const days=daysDiff(now,R);
     result.current={stage:"Sourcing",label:"等待排 ETA（圖紙已 "+days+" 天）",color:"#8b5cf6",icon:"🟣"};
     result.currentDays=days;
     return result;
   }
   
-  // 有 ETA → 進入 Supplier 生產階段
-  if(I){
-    const daysSinceETA=daysDiff(now,I);
-    if(daysSinceETA>0){
-      // ETA 已過但還沒收到 → 供應商超期
-      result.current={stage:"Supplier",label:"ETA 已過 "+daysSinceETA+" 天未到貨",color:"#ef4444",icon:"🔴"};
-      result.currentDays=daysSinceETA;
-      return result;
-    }
-    // ETA 還沒到 → 正常生產中
+  // 4. Supplier 階段（4 子階段）
+  const daysSinceETA=daysDiff(now,I);
+  
+  // 4a. ETA 還沒到 → 正常生產中
+  if(daysSinceETA<0){
     result.current={stage:"Supplier",label:"生產中（ETA 剩 "+(-daysSinceETA)+" 天）",color:"#22c55e",icon:"🟢"};
     result.currentDays=daysSinceETA;
     return result;
   }
   
+  // 4b. ETA 已過，檢查 AO (Buyer Revised ETD)
+  if(!AO){
+    // ETA 已過但沒有 Buyer Revised ETD → ETD 未確認
+    const days=daysDiff(now,I);
+    result.current={stage:"ETD未確認",label:"ETA 已過 "+days+" 天，供應商未回覆 ETD",color:"#f97316",icon:"🟠"};
+    result.currentDays=days;
+    return result;
+  }
+  
+  // 4c. AO > I → ETA 超期（供應商承諾晚於目標）
+  if(daysDiff(AO,I)>0){
+    const days=daysDiff(AO,I);
+    result.current={stage:"ETA超期",label:"Buyer Revised ETD 比目標晚 "+days+" 天",color:"#ef4444",icon:"🔴"};
+    result.currentDays=days;
+    return result;
+  }
+  
+  // 4d. 有 AO 但沒有 AR → 等待出貨
+  if(!AR){
+    const days=daysDiff(now,AO);
+    if(days>3){
+      result.current={stage:"等待出貨",label:"ETD 已到 "+days+" 天，未安排航班",color:"#f97316",icon:"🟠"};
+      result.currentDays=days;
+      return result;
+    }
+    result.current={stage:"Supplier",label:"等待出貨（ETD "+days+" 天）",color:"#eab308",icon:"🟡"};
+    result.currentDays=days;
+    return result;
+  }
+  
+  // 4e. 有 AR 但還沒到 → 等待到達
+  const arrived=AT&&(AT.includes("Reached TNES")||AT.includes("Landed")||AT.includes("In Transit"));
+  if(!arrived){
+    const days=daysDiff(now,AR);
+    if(days>4){
+      result.current={stage:"等待到達",label:"航班已 "+days+" 天，AT: "+(AT||"空白"),color:"#f97316",icon:"🟠"};
+      result.currentDays=days;
+      return result;
+    }
+    result.current={stage:"Supplier",label:"出貨中（航班 "+days+" 天）",color:"#3b82f6",icon:"🔵"};
+    result.currentDays=days;
+    return result;
+  }
+  
+  // 5. Inspection 階段
+  if(!AW){
+    const isSupplierChina=AY&&AY.includes("Supplier/China");
+    if(isSupplierChina){
+      // 在供應商驗：AO + 3 天規則
+      const days=daysDiff(now,AO);
+      if(days>3){
+        result.current={stage:"Inspection",label:"供應商驗機延遲（ETD 後 "+days+" 天未驗）",color:"#3b82f6",icon:"🔵"};
+        result.currentDays=days;
+        return result;
+      }
+      result.current={stage:"Inspection",label:"等待供應商驗機（"+days+" 天）",color:"#6366f1",icon:"🔵"};
+      result.currentDays=days;
+      return result;
+    }else{
+      // 到厂後驗：貨到了 + 3 天
+      const days=daysDiff(now,AR);
+      if(days>3){
+        result.current={stage:"Inspection",label:"到厂驗機延遲（到貨 "+days+" 天未驗）",color:"#3b82f6",icon:"🔵"};
+        result.currentDays=days;
+        return result;
+      }
+      result.current={stage:"Inspection",label:"等待到厂驗機（"+days+" 天）",color:"#6366f1",icon:"🔵"};
+      result.currentDays=days;
+      return result;
+    }
+  }
+  
+  // 6. 有驗機但沒有 GRN → 等待收貨
+  const daysSinceInsp=daysDiff(now,AW);
+  result.current={stage:"GRN",label:"等待收貨（驗機已 "+daysSinceInsp+" 天）",color:"#a855f7",icon:"🟣"};
+  result.currentDays=daysSinceInsp;
   return result;
 }
 // 向下相容：detectDelay 回傳目前卡關的責任類型
@@ -1871,8 +1944,6 @@ function renderGSheetTable(){
         const a=analyzeProject(r);
         if(a.current&&a.current.stage!=="Supplier"){
           h+='<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:'+a.current.color+'">'+a.current.icon+' '+a.current.stage+'</span></td>';
-        }else if(a.current&&a.current.stage==="Supplier"&&a.currentDays>0){
-          h+='<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:#ef4444">🔴 ETA超期</span></td>';
         }else{
           h+='<td style="color:var(--muted);font-size:11px">—</td>';
         }
@@ -2374,9 +2445,9 @@ function renderDashChangelog(){
 function renderDashDelaySummary(){
   if(!gsData.length)return;
   
-  const stageCounts={OPM:0,RD:0,Sourcing:0,Supplier:0,SupplierOverdue:0};
-  const stageDetails={OPM:[],RD:[],Sourcing:[],Supplier:[],SupplierOverdue:[]};
-  let totalActive=0;
+  // 新階段分組
+  const stageCounts={OPM:0,RD:0,Sourcing:0,ETD未確認:0,ETA超期:0,等待出貨:0,等待到達:0,Inspection:0,GRN:0,Supplier:0};
+  const stageDetails={OPM:[],RD:[],Sourcing:[],ETD未確認:[],ETA超期:[],等待出貨:[],等待到達:[],Inspection:[],GRN:[],Supplier:[]};
   
   gsData.forEach(r=>{
     const spec=gsVal(r,"MPM/OPM Spec");
@@ -2386,47 +2457,49 @@ function renderDashDelaySummary(){
     
     const a=analyzeProject(r);
     if(!a.current)return;
-    totalActive++;
     
     const s=a.current.stage;
     const days=a.currentDays;
     
-    if(s==="Supplier"&&days>0){
-      stageCounts.SupplierOverdue++;
-      stageDetails.SupplierOverdue.push({spec,sup,days,history:a.history});
-    }else if(stageCounts[s]!==undefined){
+    if(stageCounts[s]!==undefined){
       stageCounts[s]++;
-      stageDetails[s].push({spec,sup,days,history:a.history});
+      stageDetails[s].push({spec,sup,days,label:a.current.label,history:a.history});
     }
   });
   
+  // 卡片定義（問題階段 + 正常階段）
   const items=[
-    {key:"OPM",label:"等待 Supplier KO",color:"#f97316",icon:"🟠",threshold:3},
-    {key:"RD",label:"等待圖紙",color:"#f59e0b",icon:"🟡",threshold:5},
-    {key:"Sourcing",label:"等待排 ETA",color:"#8b5cf6",icon:"🟣",threshold:7},
-    {key:"SupplierOverdue",label:"ETA 超期未到貨",color:"#ef4444",icon:"🔴",threshold:0},
-    {key:"Supplier",label:"正常生產中",color:"#22c55e",icon:"🟢",threshold:-999}
+    {key:"OPM",label:"等待 Supplier KO",color:"#f97316",icon:"🟠"},
+    {key:"RD",label:"等待圖紙",color:"#f59e0b",icon:"🟡"},
+    {key:"Sourcing",label:"等待排 ETA",color:"#8b5cf6",icon:"🟣"},
+    {key:"ETD未確認",label:"ETD 未確認",color:"#f97316",icon:"🟠"},
+    {key:"ETA超期",label:"ETA 超期",color:"#ef4444",icon:"🔴"},
+    {key:"等待出貨",label:"等待出貨",color:"#eab308",icon:"🟡"},
+    {key:"等待到達",label:"等待到達",color:"#3b82f6",icon:"🔵"},
+    {key:"Inspection",label:"驗機階段",color:"#6366f1",icon:"🔵"},
+    {key:"GRN",label:"等待收貨",color:"#a855f7",icon:"🟣"},
+    {key:"Supplier",label:"正常生產中",color:"#22c55e",icon:"🟢"}
   ];
   
-  let h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px">';
+  let h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-bottom:12px">';
   items.forEach(it=>{
     const c=stageCounts[it.key]||0;
     const isWarn=it.key!=="Supplier"&&c>0;
-    h+='<div style="background:'+it.color+'15;border:1px solid '+it.color+'40;border-radius:8px;padding:10px;text-align:center;'+(isWarn?'cursor:pointer':'')+'" '+(isWarn?'onclick="this.nextElementSibling&&(this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\')"':'')+'>';
-    h+='<div style="font-size:20px;font-weight:700;color:'+it.color+'">'+c+'</div>';
-    h+='<div style="font-size:11px;color:var(--muted)">'+it.icon+' '+it.label+'</div>';
+    h+='<div style="background:'+it.color+'15;border:1px solid '+it.color+'40;border-radius:8px;padding:8px;text-align:center;'+(isWarn?'cursor:pointer':'')+'" '+(isWarn?'onclick="this.nextElementSibling&&(this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\')"':'')+'>';
+    h+='<div style="font-size:18px;font-weight:700;color:'+it.color+'">'+c+'</div>';
+    h+='<div style="font-size:10px;color:var(--muted)">'+it.icon+' '+it.label+'</div>';
     h+='</div>';
   });
   h+='</div>';
   
-  // 展開詳情（只顯示有問題的）
+  // 展開詳情（問題階段）
   items.filter(it=>it.key!=="Supplier").forEach(it=>{
     const list=stageDetails[it.key];
     if(!list.length)return;
     h+='<details style="margin-bottom:6px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">'+it.icon+' '+it.label+' ('+list.length+'筆)</summary>';
-    h+='<div style="padding:4px 0 4px 16px;font-size:11px;max-height:250px;overflow-y:auto">';
+    h+='<div style="padding:4px 0 4px 16px;font-size:11px;max-height:300px;overflow-y:auto">';
     list.forEach(d=>{
-      h+='<div style="margin-bottom:4px">• <b>'+esc(d.spec||"?")+'</b> ('+esc(d.sup||"?")+') — '+d.days+' 天';
+      h+='<div style="margin-bottom:4px">• <b>'+esc(d.spec||"?")+'</b> ('+esc(d.sup||"?")+') — '+esc(d.label)+'</div>';
       if(d.history.length){
         h+='<details style="margin-left:12px;margin-top:2px"><summary style="cursor:pointer;font-size:10px;color:var(--muted)">📋 歷史紀錄 ('+d.history.length+')</summary>';
         d.history.forEach(hi=>{
@@ -2435,7 +2508,6 @@ function renderDashDelaySummary(){
         });
         h+='</details>';
       }
-      h+='</div>';
     });
     h+='</div></details>';
   });
