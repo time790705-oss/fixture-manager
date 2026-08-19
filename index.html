@@ -404,7 +404,21 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <div id="orderTable"></div>
 </div></section>
 
-<section id="page-alerts" class="page"><div class="card"><h3 data-i18n="navAlertsH">⚠️ 異常追蹤</h3><div id="alertTable"></div></div></section>
+<section id="page-alerts" class="page"><div class="card"><h3 data-i18n="navAlertsH">⚠️ 異常追蹤</h3>
+<div class="toolbar" style="margin-bottom:12px">
+<select id="alertFilterType" onchange="renderAlerts()">
+<option value="">全部異常</option>
+<option value="Supplier">🔴 供應商延遲</option>
+<option value="RD">🟡 RD 延遲</option>
+<option value="SCM">🟠 SCM 延遲</option>
+<option value="Inspection">🔵 驗機延遲</option>
+<option value="Stalled">⚪ 停滯訂單</option>
+</select>
+<select id="alertFilterSupplier" onchange="renderAlerts()">
+<option value="">全部供應商</option>
+</select>
+</div>
+<div id="alertTable"></div></div></section>
 <section id="page-mycompany" class="page"><div class="card"><h3 data-i18n="navMyCompany">🏢 我的公司</h3><div id="myCompanyView"></div></div></section>
 <section id="page-search" class="page"><div class="card"><h3 data-i18n="navSearchH">🔍 進階搜尋</h3><div class="toolbar"><input type="search" id="globalSearch" data-i18n-ph="globalPh" placeholder="輸入關鍵字..." oninput="renderSearch()"></div><div id="searchResults"></div></div></section>
 <section id="page-gantt" class="page"><div class="card"><h3>📅 Timeline / Gantt</h3><div id="ganttView"></div></div></section>
@@ -827,29 +841,89 @@ function renderOrders(){
   document.getElementById("orderTable").innerHTML=html;
 }
 function orderActionBtns(o){return(o.needHelp?'<span style="color:var(--amber);font-size:11px;margin-right:4px" title="'+t("helpActive")+'">🆘</span>':'')+'<button class="btn btn-secondary btn-sm" onclick="openOrder(\''+esc(o.id)+'\')">'+(role==="admin"?t("edit"):t("updateProg"))+'</button> <button class="btn btn-secondary btn-sm" onclick="viewOrder(\''+esc(o.id)+'\')">'+t("view")+'</button> '+(orderStatus(o)==="overdue"&&role==="admin"?'<button class="btn btn-secondary btn-sm" onclick="chaseOrder(\''+esc(o.id)+'\')">'+t("chase")+'</button> ':'')+(role==="admin"?'<button class="btn btn-danger btn-sm" onclick="delOrder(\''+esc(o.id)+'\')">'+t("del")+'</button>':"")}
-function overdueList(){const arr=[];scopeOrders().forEach(o=>(o.milestones||[]).forEach(m=>{const d=parseDate(m.plannedDate);if(d&&!m.actualDate&&d<today()){const key=o.id+"|"+m.name;if(!resolved.includes(key))arr.push({o,m,key,days:daysBetween(d,today())})}}));return arr}
 function renderAlerts(){
-  const arr=overdueList();
-  arr.sort((a,b)=>b.days-a.days);
-  const byOrder=new Map();
-  arr.forEach(x=>{if(!byOrder.has(x.o.id))byOrder.set(x.o.id,{o:x.o,items:[]});byOrder.get(x.o.id).items.push(x)});
-  const groups=[...byOrder.values()];
+  if(!gsData.length){document.getElementById("alertTable").innerHTML='<div class="empty">等待 Google Sheet 資料載入...</div>';return}
+  
+  // 填充供應商篩選選單
+  const supSel=document.getElementById("alertFilterSupplier");
+  if(supSel&&supSel.options.length<=1){
+    const sups=[...new Set(gsData.map(r=>gsVal(r,"MPM Supplier")).filter(s=>s&&s!="#N/A"))].sort();
+    sups.forEach(s=>{const opt=document.createElement("option");opt.value=s;opt.textContent=s;supSel.appendChild(opt)});
+  }
+  
+  const filterType=document.getElementById("alertFilterType")?.value||"";
+  const filterSup=document.getElementById("alertFilterSupplier")?.value||"";
+  
+  const now=new Date();
+  const curYear=now.getFullYear();
+  const parseD=v=>{if(!v||v==="#N/A"||v==="#REF!")return null;const d=parseDate(normDate(v,curYear));return isNaN(d)?null:d};
+  const daysDiff=(a,b)=>Math.floor((a-b)/(1000*60*60*24));
+  
+  const delayColors={Supplier:"#ef4444",RD:"#f59e0b",SCM:"#f97316",Inspection:"#3b82f6",Stalled:"#6b7280"};
+  const delayLabels={Supplier:"🔴 供應商",RD:"🟡 RD",SCM:"🟠 SCM",Inspection:"🔵 驗機",Stalled:"⚪ 停滯"};
+  
+  const alerts=[];
+  gsData.forEach(r=>{
+    const spec=gsVal(r,"MPM/OPM Spec");
+    const sup=gsVal(r,"MPM Supplier");
+    const grn=gsVal(r,"Buyer GRN Date");
+    if(grn&&grn!="#N/A"&&grn!="#REF!")return; // 已完成不計算
+    if(filterSup&&sup!==filterSup)return;
+    
+    const delay=detectDelay(r);
+    if(delay){
+      const ko=gsVal(r,"MPM Customer KO Date");
+      const eta=gsVal(r,"MPM ETA Target");
+      const gap=gsVal(r,"Auto GAP");
+      alerts.push({spec,sup,type:delay,ko,eta,gap,row:r});
+    }
+    
+    // 停滯訂單
+    const G=parseD(gsVal(r,"MPM Customer KO Date"));
+    const H=gsVal(r,"MPM Supplier KO");
+    const I=gsVal(r,"MPM ETA Target");
+    const R=gsVal(r,"Supplier Drawing disassembly Start -End Date");
+    if(G&&daysDiff(now,G)>14&&(!H||H==="#N/A")&&(!I||I==="#N/A")&&(!R||R==="")){
+      if(!delay){ // 避免重複
+        alerts.push({spec,sup,type:"Stalled",ko:gsVal(r,"MPM Customer KO Date"),eta:"",gap:"",days:daysDiff(now,G),row:r});
+      }
+    }
+  });
+  
+  // 篩選類型
+  const filtered=filterType?alerts.filter(a=>a.type===filterType):alerts;
+  filtered.sort((a,b)=>{const order={Supplier:0,RD:1,SCM:2,Inspection:3,Stalled:4};return(order[a.type]||9)-(order[b.type]||9)});
+  
   let html="";
-  if(groups.length){
-    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">'+fmt(t("alertSum"),{o:groups.length,m:arr.length})+' <button class="btn btn-secondary btn-sm" onclick="resolveAllAlerts()">✔ '+t("resolveAll")+'</button></div>';
-    html+='<div class="table-wrap"><table class="data"><tr><th>'+t("thOrder")+'</th><th>'+t("thMilestone")+'</th><th>'+t("thPlanned")+'</th><th>'+t("thOverDays")+'</th><th>'+t("msNotes")+'</th><th>'+t("thAction")+'</th></tr>';
-    groups.forEach(g=>{
-      g.items.forEach((x,i)=>{html+='<tr>'+(i===0?'<td rowspan="'+g.items.length+'"><b>'+esc(g.o.id)+'</b><br>'+statusBadge("overdue")+(role==="admin"?'<br><button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="chaseOrder(\''+esc(g.o.id)+'\')">'+t("chase")+'</button>':'')+'</td>':'')+'<td>'+esc(translateMsName(x.m.name))+' '+msBadge(x.m)+'</td><td>'+fmtDate(x.m.plannedDate)+'</td><td style="color:var(--red);font-weight:700">'+x.days+'</td><td style="font-size:12px;max-width:160px;word-break:break-word">'+(x.m.notes?'<span style="color:var(--amber)">💬 </span>'+esc(x.m.notes):'<span style="color:var(--muted)">-</span>')+'</td><td><button class="btn btn-secondary btn-sm" onclick="resolveAlert(\''+esc(x.key)+'\')">✔ '+t("resolvedBtn")+'</button></td></tr>'});
+  if(filtered.length){
+    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">共 <b>'+filtered.length+'</b> 筆異常訂單</div>';
+    html+='<div class="table-wrap"><table class="data"><tr><th>Spec</th><th>Supplier</th><th>延遲責任</th><th>KO Date</th><th>ETA Target</th><th>GAP</th><th>動作</th></tr>';
+    filtered.forEach(a=>{
+      const gapN=parseInt(a.gap);
+      const gapColor=isNaN(gapN)?"inherit":gapN<0?"var(--red)":"var(--green)";
+      html+='<tr>';
+      html+='<td><b>'+esc(a.spec||"?")+'</b></td>';
+      html+='<td>'+esc(a.sup||"?")+'</td>';
+      html+='<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:'+delayColors[a.type]+'">'+delayLabels[a.type]+'</span></td>';
+      html+='<td>'+(a.ko&&a.ko!="#N/A"?esc(a.ko):"—")+'</td>';
+      html+='<td>'+(a.eta&&a.eta!="#N/A"?esc(a.eta):"—")+'</td>';
+      html+='<td style="color:'+gapColor+';font-weight:700">'+(a.gap&&a.gap!="#N/A"?a.gap:"—")+'</td>';
+      html+='<td><button class="btn btn-secondary btn-sm" onclick="viewGSRow(this)" data-spec="'+esc(a.spec)+'">查看</button></td>';
+      html+='</tr>';
     });
     html+='</table></div>';
+  }else{
+    html='<div class="empty">✅ 無異常訂單</div>';
   }
-  /* 延遲完成項目 */
-  const delayedItems=[];
-  scopeOrders().forEach(o=>{const od=parseDate(o.orderDate),dd=parseDate(o.dueDate);(o.milestones||[]).forEach(m=>{const pd=parseDate(m.plannedDate),ad=parseDate(m.actualDate);if(pd&&ad){if(ad>pd){const dl=daysBetween(pd,ad);delayedItems.push({o,m,days:dl,type:"delayed"})}if(dd&&ad>dd){const ov=daysBetween(dd,ad);delayedItems.push({o,m,days:ov,type:"overdue_done"})}}})});
-  if(delayedItems.length){html+='<h4 style="margin:16px 0 8px;color:var(--red)">🔴 已完成但延遲 / 超出交期</h4>';html+='<div class="table-wrap"><table class="data"><tr><th>'+t("thOrder")+'</th><th>'+t("thMilestone")+'</th><th>'+t("thPlanned")+'</th><th>'+t("thActual")+'</th><th>延遲天數</th><th>類型</th></tr>';delayedItems.forEach(x=>{html+='<tr><td><b>'+esc(x.o.id)+'</b></td><td>'+esc(x.m.name)+'</td><td>'+fmtDate(x.m.plannedDate)+'</td><td>'+fmtDate(x.m.actualDate)+'</td><td style="color:var(--red);font-weight:700">'+x.days+'</td><td>'+(x.type==="overdue_done"?'<span class="badge red">'+t("msOverDue")+'</span>':'<span class="badge amber">'+fmt(t("msDelayed"),{d:x.days})+'</span>')+'</td></tr>'});html+='</table></div>'}
-  if(resolved.length)html+='<p style="margin-top:12px;color:var(--muted);font-size:13px">'+fmt(t("resolvedCnt"),{n:resolved.length})+' <button class="btn btn-secondary btn-sm" onclick="clearResolved()">'+t("clearRecord")+'</button></p>';
-  if(!arr.length&&!delayedItems.length&&!resolved.length)html='<div class="empty">'+t("emptyAlerts")+'</div>';
   document.getElementById("alertTable").innerHTML=html;
+}
+function viewGSRow(btn){
+  const spec=btn.dataset.spec;
+  go('gsheet');
+  setTimeout(()=>{
+    const searchInput=document.getElementById("gsSearch");
+    if(searchInput){searchInput.value=spec;renderGSheetTable()}
+  },100);
 }
 function resolveAlert(key){if(!resolved.includes(key)){resolved.push(key);saveResolved();saveAudit("標記已處理",key);renderAlerts();renderDashboard();toast(t("saved"),"ok")}}
 function resolveAllAlerts(){const arr=overdueList();arr.forEach(x=>{if(!resolved.includes(x.key))resolved.push(x.key)});saveResolved();saveAudit("全部標記已處理",arr.length+" 項");renderAlerts();renderDashboard();toast(fmt(t("resolvedCnt"),{n:arr.length}),"ok")}
