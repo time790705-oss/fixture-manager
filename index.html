@@ -377,7 +377,7 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <div class="grid4" id="gsKpis"></div>
 <div id="dashRegion" style="margin-top:10px;margin-bottom:4px;font-size:12px;color:var(--muted)"></div>
 <div class="card" style="margin-top:12px"><h3>🔄 CFT 流程管線 <span style="font-size:12px;color:var(--muted);font-weight:normal">（點擊查看訂單明細）</span></h3><div id="dashCFT"></div></div>
-<div class="card" style="margin-top:12px"><h3>⚠️ 延遲責任摘要</h3><div id="dashDelaySummary"></div></div>
+<div class="card" style="margin-top:12px"><h3>📍 卡關點分析</h3><div id="dashDelaySummary"></div></div>
 <div class="grid2" style="margin-top:12px">
 <div class="card"><h3>📦 供應商訂單分佈</h3><div id="dashSupDist"></div></div>
 <div class="card"><h3>📅 近期交期 <button class="btn btn-secondary btn-sm" onclick="toggleDueDays()" style="float:right;padding:2px 8px;font-size:11px" id="dueDaysBtn">7天</button></h3><div id="dashDueSoon"></div></div>
@@ -408,11 +408,10 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <div class="toolbar" style="margin-bottom:12px">
 <select id="alertFilterType" onchange="renderAlerts()">
 <option value="">全部異常</option>
-<option value="Supplier">🔴 供應商延遲</option>
-<option value="RD">🟡 RD 延遲</option>
-<option value="SCM">🟠 SCM 延遲</option>
-<option value="Inspection">🔵 驗機延遲</option>
-<option value="Stalled">⚪ 停滯訂單</option>
+<option value="OPM">🟠 等待 Supplier KO</option>
+<option value="RD">🟡 等待圖紙</option>
+<option value="Sourcing">🟣 等待排 ETA</option>
+<option value="SupplierOverdue">🔴 ETA 超期</option>
 </select>
 <select id="alertFilterSupplier" onchange="renderAlerts()">
 <option value="">全部供應商</option>
@@ -847,73 +846,68 @@ function renderAlerts(){
   // 填充供應商篩選選單
   const supSel=document.getElementById("alertFilterSupplier");
   if(supSel&&supSel.options.length<=1){
-    const sups=[...new Set(gsData.map(r=>gsVal(r,"MPM Supplier")).filter(s=>s&&s!="#N/A"))].sort();
+    const sups=[...new Set(gsData.map(r=>gsVal(r,"MPM Supplier")).filter(s=>s&&s!=="#N/A"))].sort();
     sups.forEach(s=>{const opt=document.createElement("option");opt.value=s;opt.textContent=s;supSel.appendChild(opt)});
   }
   
   const filterType=document.getElementById("alertFilterType")?.value||"";
   const filterSup=document.getElementById("alertFilterSupplier")?.value||"";
   
-  const now=new Date();
-  const curYear=now.getFullYear();
-  const parseD=v=>{if(!v||v==="#N/A"||v==="#REF!")return null;const d=parseDate(normDate(v,curYear));return isNaN(d)?null:d};
-  const daysDiff=(a,b)=>Math.floor((a-b)/(1000*60*60*24));
-  
-  const delayColors={Supplier:"#ef4444",RD:"#f59e0b",SCM:"#f97316",Inspection:"#3b82f6",Stalled:"#6b7280"};
-  const delayLabels={Supplier:"🔴 供應商",RD:"🟡 RD",SCM:"🟠 SCM",Inspection:"🔵 驗機",Stalled:"⚪ 停滯"};
-  
   const alerts=[];
   gsData.forEach(r=>{
     const spec=gsVal(r,"MPM/OPM Spec");
     const sup=gsVal(r,"MPM Supplier");
     const grn=gsVal(r,"Buyer GRN Date");
-    if(grn&&grn!="#N/A"&&grn!="#REF!")return; // 已完成不計算
+    if(grn&&grn!=="#N/A"&&grn!=="#REF!")return;
     if(filterSup&&sup!==filterSup)return;
     
-    const delay=detectDelay(r);
-    if(delay){
-      const ko=gsVal(r,"MPM Customer KO Date");
-      const eta=gsVal(r,"MPM ETA Target");
-      const gap=gsVal(r,"Auto GAP");
-      alerts.push({spec,sup,type:delay,ko,eta,gap,row:r});
-    }
+    const a=analyzeProject(r);
+    if(!a.current)return;
     
-    // 停滯訂單
-    const G=parseD(gsVal(r,"MPM Customer KO Date"));
-    const H=gsVal(r,"MPM Supplier KO");
-    const I=gsVal(r,"MPM ETA Target");
-    const R=gsVal(r,"Supplier Drawing disassembly Start -End Date");
-    if(G&&daysDiff(now,G)>14&&(!H||H==="#N/A")&&(!I||I==="#N/A")&&(!R||R==="")){
-      if(!delay){ // 避免重複
-        alerts.push({spec,sup,type:"Stalled",ko:gsVal(r,"MPM Customer KO Date"),eta:"",gap:"",days:daysDiff(now,G),row:r});
-      }
-    }
+    const s=a.current.stage;
+    const type=s==="Supplier"&&a.currentDays>0?"SupplierOverdue":s;
+    if(type==="Supplier")return; // 正常生產中不列入異常
+    
+    const ko=gsVal(r,"MPM Customer KO Date");
+    const eta=gsVal(r,"MPM ETA Target");
+    const gap=gsVal(r,"Auto GAP");
+    alerts.push({spec,sup,type,current:a.current,days:a.currentDays,ko,eta,gap,history:a.history});
   });
   
-  // 篩選類型
-  const filtered=filterType?alerts.filter(a=>a.type===filterType):alerts;
-  filtered.sort((a,b)=>{const order={Supplier:0,RD:1,SCM:2,Inspection:3,Stalled:4};return(order[a.type]||9)-(order[b.type]||9)});
+  // 篩選
+  const filtered=filterType?alerts.filter(x=>x.type===filterType):alerts;
+  filtered.sort((a,b)=>b.days-a.days);
   
   let html="";
   if(filtered.length){
-    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">共 <b>'+filtered.length+'</b> 筆異常訂單</div>';
-    html+='<div class="table-wrap"><table class="data"><tr><th>Spec</th><th>Supplier</th><th>延遲責任</th><th>KO Date</th><th>ETA Target</th><th>GAP</th><th>動作</th></tr>';
+    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">共 <b>'+filtered.length+'</b> 筆卡關訂單</div>';
+    html+='<div class="table-wrap"><table class="data"><tr><th>Spec</th><th>Supplier</th><th>目前卡關</th><th>天數</th><th>ETA Target</th><th>GAP</th><th>歷史</th><th>動作</th></tr>';
     filtered.forEach(a=>{
       const gapN=parseInt(a.gap);
       const gapColor=isNaN(gapN)?"inherit":gapN<0?"var(--red)":"var(--green)";
       html+='<tr>';
       html+='<td><b>'+esc(a.spec||"?")+'</b></td>';
       html+='<td>'+esc(a.sup||"?")+'</td>';
-      html+='<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:'+delayColors[a.type]+'">'+delayLabels[a.type]+'</span></td>';
-      html+='<td>'+(a.ko&&a.ko!="#N/A"?esc(a.ko):"—")+'</td>';
-      html+='<td>'+(a.eta&&a.eta!="#N/A"?esc(a.eta):"—")+'</td>';
-      html+='<td style="color:'+gapColor+';font-weight:700">'+(a.gap&&a.gap!="#N/A"?a.gap:"—")+'</td>';
+      html+='<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:'+a.current.color+'">'+a.current.icon+' '+a.current.label+'</span></td>';
+      html+='<td style="font-weight:700;color:'+a.current.color+'">'+a.days+'</td>';
+      html+='<td>'+(a.eta&&a.eta!=="#N/A"?esc(a.eta):"—")+'</td>';
+      html+='<td style="color:'+gapColor+';font-weight:700">'+(a.gap&&a.gap!=="#N/A"?a.gap:"—")+'</td>';
+      html+='<td>';
+      if(a.history.length){
+        html+='<details><summary style="cursor:pointer;font-size:10px;color:var(--muted)">'+a.history.length+'筆</summary>';
+        a.history.forEach(hi=>{
+          const hColor=hi.stage==="SCM"?"#f97316":hi.stage==="RD"?"#f59e0b":hi.stage==="Supplier"?"#ef4444":"#6b7280";
+          html+='<div style="font-size:10px;color:'+hColor+'">⚠️ '+esc(hi.msg)+'</div>';
+        });
+        html+='</details>';
+      }else{html+='<span style="color:var(--muted);font-size:10px">—</span>'}
+      html+='</td>';
       html+='<td><button class="btn btn-secondary btn-sm" onclick="viewGSRow(this)" data-spec="'+esc(a.spec)+'">查看</button></td>';
       html+='</tr>';
     });
     html+='</table></div>';
   }else{
-    html='<div class="empty">✅ 無異常訂單</div>';
+    html='<div class="empty">✅ 無卡關訂單</div>';
   }
   document.getElementById("alertTable").innerHTML=html;
 }
@@ -1704,54 +1698,102 @@ function gsOverallStatus(r){
   return"pending";
 }
 
-// 延遲偵測規則：回傳延遲責任歸屬
-function detectDelay(r){
+// 專案分析：回傳目前卡關點 + 歷史異常紀錄
+function analyzeProject(r){
   const now=new Date();
   const curYear=now.getFullYear();
-  // 輔助函數：解析日期
   const parseD=v=>{if(!v||v==="#N/A"||v==="#REF!")return null;const d=parseDate(normDate(v,curYear));return isNaN(d)?null:d};
-  // 輔助函數：日期差距天數
   const daysDiff=(a,b)=>Math.floor((a-b)/(1000*60*60*24));
+  const has=(v)=>v&&v!="#N/A"&&v!="#REF!";
   
-  const grn=gsVal(r,"Buyer GRN Date");
-  if(grn&&grn!=="#N/A"&&grn!=="#REF!")return null; // 已完成不計算
+  const result={current:null,currentDays:0,history:[]};
   
-  const G=parseD(gsVal(r,"MPM Customer KO Date")); // G: MPM KO Date
-  const H=parseD(gsVal(r,"MPM Supplier KO")); // H: MPM Supplier KO
-  const I=parseD(gsVal(r,"MPM ETA Target")); // I: MPM ETA Target
-  const N=parseD(gsVal(r,"Auto Estimated ETA")); // N: Auto Estimated ETA
-  const R=parseD(gsVal(r,"Supplier Drawing disassembly Start -End Date")); // R: Drawing Received Date
-  const AN=parseD(gsVal(r,"Supplier Estimated ETD date")); // AN: Supplier Estimated ETD
-  const AO=parseD(gsVal(r,"Buyer Revised ETD Date")); // AO: Buyer Revised ETD
-  const AR=parseD(gsVal(r,"Supplier Flight Date")); // AR: Supplier Flight Date
-  const AS=gsVal(r,"Supplier Flight Tracking Number"); // AS: Flight Tracking Number
-  const AT=gsVal(r,"Buyer Flight/BOE Status"); // AT: Flight/BOE Status
-  const AW=parseD(gsVal(r,"ShenCai Inspection Actual Date")); // AW: Inspection Actual Date
-  const AY=gsVal(r,"Supplier Inspection Location"); // AY: Inspection Location
+  // 已完成 → 不分析
+  if(has(gsVal(r,"Buyer GRN Date")))return result;
   
-  // 規則 2: RD Delay - H 有日期，R 空白或 R > H
-  if(H&&(!R||R>H))return"RD";
+  const G=parseD(gsVal(r,"MPM Customer KO Date"));
+  const H=parseD(gsVal(r,"MPM Supplier KO"));
+  const I=parseD(gsVal(r,"MPM ETA Target"));
+  const N=parseD(gsVal(r,"Auto Estimated ETA"));
+  const R=parseD(gsVal(r,"Supplier Drawing disassembly Start -End Date"));
+  const AN=parseD(gsVal(r,"Supplier Estimated ETD date"));
+  const AO=parseD(gsVal(r,"Buyer Revised ETD Date"));
+  const AR=parseD(gsVal(r,"Supplier Flight Date"));
+  const AW=parseD(gsVal(r,"ShenCai Inspection Actual Date"));
+  const AY=gsVal(r,"Supplier Inspection Location");
   
-  // 規則 3: SCM Delay
-  // 3a: G 有日期，H 空白或 H > G+3
-  if(G&&(!H||daysDiff(H,G)>3))return"SCM";
-  // 3b: AR 空白，且現在 > AO+3
-  if(!AR&&AO&&daysDiff(now,AO)>3)return"SCM";
-  // 3c: AT 在 AR+4 天內未變成 "Reached TNES"
-  if(AR&&daysDiff(now,AR)<=4&&!AT.includes("Reached TNES")&&!AT.includes("Landed")&&!AT.includes("In Transit"))return"SCM";
+  // === 歷史異常紀錄（從日期反推曾經發生過什麼） ===
+  // SCM 歷史：G→H 超過 3 天
+  if(G&&H&&daysDiff(H,G)>3)
+    result.history.push({stage:"SCM",msg:"KO 後 "+daysDiff(H,G)+" 天才發 Supplier KO（正常 ≤3 天）",days:daysDiff(H,G)-3});
+  // RD 歷史：H→R 超過 5 天
+  if(H&&R&&daysDiff(R,H)>5)
+    result.history.push({stage:"RD",msg:"Supplier KO 後 "+daysDiff(R,H)+" 天才收到圖紙（正常 ≤5 天）",days:daysDiff(R,H)-5});
+  // Sourcing 歷史：H→I 超過 7 天
+  if(H&&I&&daysDiff(I,H)>7)
+    result.history.push({stage:"Sourcing",msg:"Supplier KO 後 "+daysDiff(I,H)+" 天才排上 ETA（正常 ≤7 天）",days:daysDiff(I,H)-7});
+  // 供應商交期歷史：N > I
+  if(N&&I&&daysDiff(N,I)>0)
+    result.history.push({stage:"Supplier",msg:"預估 ETA 比目標晚 "+daysDiff(N,I)+" 天",days:daysDiff(N,I)});
+  // Buyer 擦屁股歷史：AO > AN
+  if(AO&&AN&&daysDiff(AO,AN)>0)
+    result.history.push({stage:"Supplier",msg:"Buyer 修改 ETD 比供應商預估晚 "+daysDiff(AO,AN)+" 天",days:daysDiff(AO,AN)});
   
-  // 規則 5: 供應商 Delay
-  // 5a: N > I (Auto Estimated ETA 晚於 MPM ETA Target)
-  if(N&&I&&daysDiff(N,I)>0)return"Supplier";
-  // 5b: AO > AN (Buyer Revised ETD 晚於 Supplier Estimated ETD)
-  if(AO&&AN&&daysDiff(AO,AN)>0)return"Supplier";
-  // 5c: AW > AO (實際驗機日期晚於 Buyer Revised ETD)
-  if(AW&&AO&&daysDiff(AW,AO)>0)return"Supplier";
+  // === 目前卡關點分析 ===
+  // 卡在哪一關？從 OPM 往下檢查，第一個未完成的階段
+  if(!G){
+    // 連 KO 都沒有 → 尚未啟動
+    return result;
+  }
   
-  // 規則 6: 驗機 Delay (僅 AY = "Supplier/China" 才計算)
-  if(AY&&AY.includes("Supplier/China")&&!AW&&AO&&daysDiff(now,AO)>3)return"Inspection";
+  if(!H){
+    // 有 Customer KO 但沒有 Supplier KO → 卡在 OPM
+    const days=daysDiff(now,G);
+    if(days>3)result.current={stage:"OPM",label:"等待發 Supplier KO",color:"#f97316",icon:"🟠"};
+    result.currentDays=days;
+    return result;
+  }
   
-  return null; // 無延遲
+  if(!R){
+    // 有 Supplier KO 但沒有 Drawing → 卡在 RD
+    const days=daysDiff(now,H);
+    result.current={stage:"RD",label:"等待圖紙（KO 已 "+days+" 天）",color:"#f59e0b",icon:"🟡"};
+    result.currentDays=days;
+    return result;
+  }
+  
+  if(!I){
+    // 有 Drawing 但沒有 ETA → 卡在 Sourcing
+    const days=daysDiff(now,R);
+    result.current={stage:"Sourcing",label:"等待排 ETA（圖紙已 "+days+" 天）",color:"#8b5cf6",icon:"🟣"};
+    result.currentDays=days;
+    return result;
+  }
+  
+  // 有 ETA → 進入 Supplier 生產階段
+  if(I){
+    const daysSinceETA=daysDiff(now,I);
+    if(daysSinceETA>0){
+      // ETA 已過但還沒收到 → 供應商超期
+      result.current={stage:"Supplier",label:"ETA 已過 "+daysSinceETA+" 天未到貨",color:"#ef4444",icon:"🔴"};
+      result.currentDays=daysSinceETA;
+      return result;
+    }
+    // ETA 還沒到 → 正常生產中
+    result.current={stage:"Supplier",label:"生產中（ETA 剩 "+(-daysSinceETA)+" 天）",color:"#22c55e",icon:"🟢"};
+    result.currentDays=daysSinceETA;
+    return result;
+  }
+  
+  return result;
+}
+// 向下相容：detectDelay 回傳目前卡關的責任類型
+function detectDelay(r){
+  const a=analyzeProject(r);
+  if(!a.current)return null;
+  const s=a.current.stage;
+  if(s==="OPM"||s==="Sourcing")return"SCM";
+  return s; // RD, Supplier, QA, Inspection
 }
 
 function gsStatusTag(status){
@@ -1826,9 +1868,14 @@ function renderGSheetTable(){
     cols.forEach(c=>{
       if(c.name==="_status"){h+='<td>'+gsStatusTag(gsOverallStatus(r))+'</td>'}
       else if(c.name==="_delay"){
-        const d=detectDelay(r);
-        if(d){h+='<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:'+delayColors[d]+'">'+delayLabels[d]+'</span></td>'}
-        else{h+='<td style="color:var(--muted);font-size:11px">—</td>'}
+        const a=analyzeProject(r);
+        if(a.current&&a.current.stage!=="Supplier"){
+          h+='<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:'+a.current.color+'">'+a.current.icon+' '+a.current.stage+'</span></td>';
+        }else if(a.current&&a.current.stage==="Supplier"&&a.currentDays>0){
+          h+='<td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff;background:#ef4444">🔴 ETA超期</span></td>';
+        }else{
+          h+='<td style="color:var(--muted);font-size:11px">—</td>';
+        }
       }
       else if(c.name==="Auto GAP"){
         const v=gsVal(r,c.name);const n=parseInt(v);
@@ -2326,64 +2373,68 @@ function renderDashChangelog(){
 /* ==================== 儀表板 Google Sheet 數據品質檢查 ==================== */
 function renderDashDelaySummary(){
   if(!gsData.length)return;
-  const now=new Date();
-  const curYear=now.getFullYear();
-  const parseD=v=>{if(!v||v==="#N/A"||v==="#REF!")return null;const d=parseDate(normDate(v,curYear));return isNaN(d)?null:d};
-  const daysDiff=(a,b)=>Math.floor((a-b)/(1000*60*60*24));
   
-  const counts={Supplier:0,RD:0,SCM:0,Inspection:0,Stalled:0};
-  const details={Supplier:[],RD:[],SCM:[],Inspection:[],Stalled:[]};
+  const stageCounts={OPM:0,RD:0,Sourcing:0,Supplier:0,SupplierOverdue:0};
+  const stageDetails={OPM:[],RD:[],Sourcing:[],Supplier:[],SupplierOverdue:[]};
+  let totalActive=0;
   
-  gsData.forEach((r,i)=>{
+  gsData.forEach(r=>{
     const spec=gsVal(r,"MPM/OPM Spec");
     const sup=gsVal(r,"MPM Supplier");
     const grn=gsVal(r,"Buyer GRN Date");
-    if(grn&&grn!="#N/A"&&grn!="#REF!")return; // 已完成不計算
+    if(grn&&grn!=="#N/A"&&grn!=="#REF!")return;
     
-    const delay=detectDelay(r);
-    if(delay){
-      counts[delay]++;
-      details[delay].push({spec,sup}); // 記錄全部
-    }
+    const a=analyzeProject(r);
+    if(!a.current)return;
+    totalActive++;
     
-    // 停滯訂單：KO > 14天且後續欄位全空白
-    const G=parseD(gsVal(r,"MPM Customer KO Date"));
-    const H=gsVal(r,"MPM Supplier KO");
-    const I=gsVal(r,"MPM ETA Target");
-    const R=gsVal(r,"Supplier Drawing disassembly Start -End Date");
-    if(G&&daysDiff(now,G)>14&&(!H||H==="#N/A")&&(!I||I==="#N/A")&&(!R||R==="")){
-      counts.Stalled++;
-      details.Stalled.push({spec,sup,days:daysDiff(now,G)});
+    const s=a.current.stage;
+    const days=a.currentDays;
+    
+    if(s==="Supplier"&&days>0){
+      stageCounts.SupplierOverdue++;
+      stageDetails.SupplierOverdue.push({spec,sup,days,history:a.history});
+    }else if(stageCounts[s]!==undefined){
+      stageCounts[s]++;
+      stageDetails[s].push({spec,sup,days,history:a.history});
     }
   });
   
   const items=[
-    {key:"Supplier",label:"供應商延遲",color:"#ef4444",icon:"🔴"},
-    {key:"RD",label:"RD 延遲",color:"#f59e0b",icon:"🟡"},
-    {key:"SCM",label:"SCM 延遲",color:"#f97316",icon:"🟠"},
-    {key:"Inspection",label:"驗機延遲",color:"#3b82f6",icon:"🔵"},
-    {key:"Stalled",label:"停滯訂單（KO>14天無進展）",color:"#6b7280",icon:"⚪"}
+    {key:"OPM",label:"等待 Supplier KO",color:"#f97316",icon:"🟠",threshold:3},
+    {key:"RD",label:"等待圖紙",color:"#f59e0b",icon:"🟡",threshold:5},
+    {key:"Sourcing",label:"等待排 ETA",color:"#8b5cf6",icon:"🟣",threshold:7},
+    {key:"SupplierOverdue",label:"ETA 超期未到貨",color:"#ef4444",icon:"🔴",threshold:0},
+    {key:"Supplier",label:"正常生產中",color:"#22c55e",icon:"🟢",threshold:-999}
   ];
   
   let h='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px">';
   items.forEach(it=>{
-    const c=counts[it.key]||0;
-    h+='<div style="background:'+it.color+'15;border:1px solid '+it.color+'40;border-radius:8px;padding:10px;text-align:center">';
+    const c=stageCounts[it.key]||0;
+    const isWarn=it.key!=="Supplier"&&c>0;
+    h+='<div style="background:'+it.color+'15;border:1px solid '+it.color+'40;border-radius:8px;padding:10px;text-align:center;'+(isWarn?'cursor:pointer':'')+'" '+(isWarn?'onclick="this.nextElementSibling&&(this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\')"':'')+'>';
     h+='<div style="font-size:20px;font-weight:700;color:'+it.color+'">'+c+'</div>';
     h+='<div style="font-size:11px;color:var(--muted)">'+it.icon+' '+it.label+'</div>';
     h+='</div>';
   });
   h+='</div>';
   
-  // 展開詳情
-  items.forEach(it=>{
-    const list=details[it.key];
+  // 展開詳情（只顯示有問題的）
+  items.filter(it=>it.key!=="Supplier").forEach(it=>{
+    const list=stageDetails[it.key];
     if(!list.length)return;
-    h+='<details style="margin-bottom:6px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">'+it.icon+' '+it.label+' 詳情 ('+list.length+'筆)</summary>';
-    h+='<div style="padding:4px 0 4px 16px;font-size:11px;max-height:200px;overflow-y:auto">';
+    h+='<details style="margin-bottom:6px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">'+it.icon+' '+it.label+' ('+list.length+'筆)</summary>';
+    h+='<div style="padding:4px 0 4px 16px;font-size:11px;max-height:250px;overflow-y:auto">';
     list.forEach(d=>{
-      h+='<div>• <b>'+esc(d.spec||"?")+'</b> ('+esc(d.sup||"?")+')';
-      if(it.key==="Stalled")h+=' — 已停滯 '+d.days+' 天';
+      h+='<div style="margin-bottom:4px">• <b>'+esc(d.spec||"?")+'</b> ('+esc(d.sup||"?")+') — '+d.days+' 天';
+      if(d.history.length){
+        h+='<details style="margin-left:12px;margin-top:2px"><summary style="cursor:pointer;font-size:10px;color:var(--muted)">📋 歷史紀錄 ('+d.history.length+')</summary>';
+        d.history.forEach(hi=>{
+          const hColor=hi.stage==="SCM"?"#f97316":hi.stage==="RD"?"#f59e0b":hi.stage==="Supplier"?"#ef4444":"#6b7280";
+          h+='<div style="font-size:10px;color:'+hColor+'">⚠️ '+esc(hi.msg)+'</div>';
+        });
+        h+='</details>';
+      }
       h+='</div>';
     });
     h+='</div></details>';
