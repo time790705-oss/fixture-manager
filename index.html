@@ -1756,8 +1756,9 @@ function analyzeProject(r){
     return result;
   }
   
-  // 2. RD 階段：有 Supplier KO 但 Drawing 空白或 R > H
-  if(!R||R>H){
+  // 2. RD 階段：有 Supplier KO 但 Drawing 空白 → 等待圖紙
+  // 注意：R > H（圖紙晚於 KO）屬於歷史延遲，不代表目前卡關
+  if(!R){
     const days=daysDiff(now,H);
     result.current={stage:"RD",label:"等待圖紙（KO 已 "+days+" 天）",color:"#f59e0b",icon:"🟡"};
     result.currentDays=days;
