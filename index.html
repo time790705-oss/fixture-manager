@@ -1554,7 +1554,8 @@ function fetchGSheet(){
       "L1/L2 +19d(ETA MAA)，L3&L4 +22d(ETA MAA) MPM Customer KO Date":"MPM Customer KO Date",
       "MPM Supplier KO ":"MPM Supplier KO",
       "MPM Supplier KO":"MPM Supplier KO",
-      "Auto Suppier Drawing Received Date":"Supplier Drawing disassembly Start -End Date",
+      // 注意：不映射 "Auto Suppier Drawing Received Date"，因為它與 "Supplier Drawing disassembly Start -End Date" 是不同欄位
+      // 前者是收到日期（單一日期），後者是拆裝日期（區間），不能混為一談
       "Supplier Drawing disassembly on schedule\n(Y/N)":"Supplier Drawing disassembly on schedule (Y/N)",
       "Supplier Raw Material On schedule \n(Y/N)":"Supplier Raw Material On schedule (Y/N)",
       "Supplier STD Part On schedule (Y/N)":"Supplier STD Part On schedule (Y/N)",
@@ -1707,6 +1708,8 @@ function analyzeProject(r){
   const now=new Date();
   const curYear=now.getFullYear();
   const parseD=v=>{if(!v||v==="#N/A"||v==="#REF!")return null;const d=parseDate(normDate(v,curYear));return isNaN(d)?null:d};
+  // 日期區間解析（如 "7/20-7/21" 取起始日）
+  const parseRange=v=>{if(!v||v==="#N/A"||v==="#REF!")return null;const start=v.split("-")[0].trim();const d=parseDate(normDate(start,curYear));return isNaN(d)?null:d};
   const daysDiff=(a,b)=>Math.floor((a-b)/(1000*60*60*24));
   const has=(v)=>v&&v!="#N/A"&&v!="#REF!";
   
@@ -1719,7 +1722,9 @@ function analyzeProject(r){
   const H=parseD(gsVal(r,"MPM Supplier KO"));
   const I=parseD(gsVal(r,"MPM ETA Target"));
   const N=parseD(gsVal(r,"Auto Estimated ETA"));
-  const R=parseD(gsVal(r,"Supplier Drawing disassembly Start -End Date"));
+  // R：優先使用收到日期（單一日期），備用拆裝日期（區間取起始日）
+  let R=parseD(gsVal(r,"Auto Suppier Drawing Received Date"));
+  if(!R)R=parseRange(gsVal(r,"Supplier Drawing disassembly Start -End Date"));
   const AN=parseD(gsVal(r,"Supplier Estimated ETD date"));
   const AO=parseD(gsVal(r,"Buyer Revised ETD Date"));
   const AR=parseD(gsVal(r,"Supplier Flight Date"));
