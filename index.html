@@ -377,7 +377,6 @@ html.dark .gs-filters select,html.dark .gs-filters input{background:#101a30;bord
 <div class="grid4" id="gsKpis"></div>
 <div id="dashRegion" style="margin-top:10px;margin-bottom:4px;font-size:12px;color:var(--muted)"></div>
 <div class="card" style="margin-top:12px"><h3>🔄 CFT 流程管線 <span style="font-size:12px;color:var(--muted);font-weight:normal">（點擊查看訂單明細）</span></h3><div id="dashCFT"></div></div>
-<div class="card" style="margin-top:12px"><h3>📊 供應商即時狀態</h3><div id="dashSupStatus"></div></div>
 <div class="card" style="margin-top:12px"><h3>⚠️ 延遲責任摘要</h3><div id="dashDelaySummary"></div></div>
 <div class="grid2" style="margin-top:12px">
 <div class="card"><h3>📦 供應商訂單分佈</h3><div id="dashSupDist"></div></div>
@@ -766,7 +765,6 @@ function renderDashboard(){
   const regionHtml=Object.entries(regionCounts).filter(([,c])=>c>0).map(([r,c])=>'<span class="badge blue" style="margin-right:4px">'+esc(r)+': '+c+'</span>').join("");
   document.getElementById("dashRegion").innerHTML=regionHtml?'<span style="margin-right:6px">地區分佈：</span>'+regionHtml:'';
   renderDashCFT();
-  renderDashSupStatus();
   renderDashSupDist();
   renderDashDueSoon();
   renderDashGapRank();
@@ -2038,37 +2036,6 @@ function showCFTDetail(idx){
 }
 
 /* ==================== 儀表板供應商即時狀態 ==================== */
-function renderDashSupStatus(){
-  if(!gsData.length){document.getElementById("dashSupStatus").innerHTML='<div class="empty">等待 Google Sheet 資料載入...</div>';return}
-  const supMap=new Map();
-  gsData.forEach(r=>{
-    const sup=gsVal(r,"MPM Supplier");
-    if(!sup||sup==="#N/A")return;
-    if(!supMap.has(sup))supMap.set(sup,{name:sup,active:0,delayed:0,done:0,totalGap:0,gapCount:0});
-    const s=supMap.get(sup);
-    s.active++;
-    const gap=parseInt(gsVal(r,"Auto GAP"));
-    if(!isNaN(gap)&&Math.abs(gap)<=365){s.totalGap+=gap;s.gapCount++;if(gap<-3)s.delayed++}
-    if(gsVal(r,"Buyer GRN Date"))s.done++;
-  });
-  const sups=[...supMap.values()].sort((a,b)=>b.active-a.active);
-  let h='<div class="sup-status-grid">';
-  sups.slice(0,8).forEach(s=>{
-    const avgGap=s.gapCount>0?Math.round(s.totalGap/s.gapCount*10)/10:0;
-    const cls=avgGap<-3?"low":avgGap<0?"mid":"high";
-    h+='<div class="sup-status-card '+cls+'">'+
-      '<div class="sup-name">'+esc(s.name)+'</div>'+
-      '<div class="sup-stats">'+
-      '<div><span style="color:var(--muted)">進行中</span><br><b>'+s.active+'</b></div>'+
-      '<div><span style="color:var(--muted)">嚴重延遲</span><br><b style="color:'+(s.delayed>0?"var(--red)":"var(--green)")+'">'+s.delayed+'</b></div>'+
-      '<div><span style="color:var(--muted)">已完成</span><br><b style="color:var(--green)">'+s.done+'</b></div>'+
-      '<div><span style="color:var(--muted)">平均 GAP</span><br><b style="color:'+(avgGap<0?"var(--red)":"var(--green)")+'">'+avgGap+'天</b></div>'+
-      '</div></div>';
-  });
-  h+='</div>';
-  document.getElementById("dashSupStatus").innerHTML=h;
-}
-
 /* ==================== 儀表板供應商訂單分佈 ==================== */
 function renderDashSupDist(){
   if(!gsData.length){document.getElementById("dashSupDist").innerHTML='<div class="empty">等待資料...</div>';return}
