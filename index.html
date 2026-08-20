@@ -2088,7 +2088,7 @@ function showDashKpiDetail(type){
   orders.forEach(o=>{
     const gapColor=isNaN(o.gap)?"":o.gap<-3?"var(--red)":o.gap<0?"var(--amber)":"var(--green)";
     const gapText=isNaN(o.gap)?"—":(o.gap>0?"+"+o.gap+"天":o.gap+"天");
-    const statusMap={done:["green","已完成"],shipped:["blue","已出運"],oqc_done:["blue","OQC完成"],in_progress:["amber","進行中"],not_started:["gray","未開始"]};
+    const statusMap={done:["green","已完成"],shipped:["blue","已出運"],oqc_done:["blue","OQC完成"],in_progress:["amber","進行中"],delayed:["red","延遲"],pending:["gray","待處理"],not_started:["gray","未開始"]};
     const st=statusMap[o.status]||["gray","—"];
     h+='<tr>';
     h+='<td><b>'+esc(o.spec)+'</b></td>';
