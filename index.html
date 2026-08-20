@@ -2188,9 +2188,10 @@ function showCFTDetail(idx){
     {name:"QA",cols:[
       {h:"Spec",v:r=>gsVal(r,"MPM/OPM Spec")},
       {h:"Supplier",v:r=>gsVal(r,"MPM Supplier")},
-      {h:"Drawing %",v:r=>gsVal(r,"Supplier Drawing disassembly %")},
-      {h:"OQC %",v:r=>gsVal(r,"Supplier OQC %")},
-      {h:"Target ETA",v:r=>gsVal(r,"MPM ETA Target")}
+      {h:"Auto Inspection Estimated Date",v:r=>gsVal(r,"Auto Inspection Estimated Date")},
+      {h:"ShenCai Inspection Actual Date",v:r=>gsVal(r,"ShenCai Inspection Actual Date")},
+      {h:"ShenCai 驗機確認Remark",v:r=>gsVal(r,"ShenCai 驗機確認Remark")},
+      {h:"Supplier/Buyer Remark By supplier/Buyer",v:r=>gsVal(r,"Supplier/Buyer Remark By supplier/Buyer")}
     ]}
   ];
   const cols=stageCols[idx].cols;
